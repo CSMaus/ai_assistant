@@ -12,7 +12,10 @@ def command_listener():
         command_queue.task_done()
 
 
-listener_thread = Thread(target=command_listener)
-listener_thread.daemon = True
-listener_thread.start()
+if __name__ == "__main__":
+    listener_thread = Thread(target=command_listener)
+    listener_thread.daemon = True
+    listener_thread.start()
+
+    listener_thread.join()
 

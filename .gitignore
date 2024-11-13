@@ -168,3 +168,4 @@ cython_debug/
 #.idea/
 test-First-combo-side1.bvh
 *.bvh
+key.txt
