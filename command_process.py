@@ -17,7 +17,17 @@ COMMAND_ENDPOINTS = {
         "endpoint": f"{BASE_URL}/getFileInformation",
         "method": "POST",
         "payload": lambda: {},
-    }
+    },
+    "getFileDirectory": {
+        "endpoint": f"{BASE_URL}/getFileDirectory",
+        "method": "POST",
+        "payload": lambda: {},
+    },
+    "setNewWorkingDirectory": {
+        "endpoint": f"{BASE_URL}/setNewWorkingDirectory",
+        "method": "POST",
+        "payload": lambda file_path: {"FilePath": file_path},
+    },
 }
 
 

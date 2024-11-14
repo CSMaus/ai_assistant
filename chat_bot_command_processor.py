@@ -56,7 +56,9 @@ def process_input(user_input):
                     "role": "user",
                     "content": f"Interpret the following text: {user_input} into command."
                                f"Available commands: 'loadData' which requires file path as input, 'updatePlot', "
-                               f"'getFileInformation' which  return string with information"
+                               f"'getFileInformation' which  return string with information,"
+                               f"'getFileDirectory' which returns string with the full path to the folder where opened file is located,"
+                               f"'setNewWorkingDirectory' to change the working to the input argument. "
                                f"Respond ONLY command in JSON format without additional words and symbols. Start respond with open bracket and 'command' and fill rst based on text analysis 'args', with 'args' as a list of values only (no key names in the list)."
                 }
             ],
