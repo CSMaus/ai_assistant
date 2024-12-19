@@ -43,6 +43,13 @@ def parse_response(response_text):
         return None, []
 
 
+# TODO:
+# okay, will make the input - read the list of the commands with short description for each (few words)
+# then teh output will be the list of commands by their names, arguments and time delay for each before sending next one
+# maybe some commands will call functions in python
+# but better will be to sent them all into program - more clear and universal for application code
+
+
 def process_input(user_input):
     """
     Send the user's input to OpenAI's API to generate a command response.
