@@ -58,7 +58,8 @@ def process_input(user_input):
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",  # Replace with "gpt-4" or other chat model if needed
             messages=[
-                {"role": "system", "content": "You are an assistant that helps to transform input text into commands in desired format."},
+                {"role": "system", "content": "You are converter who transform input text into API commands"},
+                # You are an assistant that helps to transform input text into commands in desired format
                 {
                     "role": "user",
                     "content": f"Interpret the following text: {user_input} into command."
