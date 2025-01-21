@@ -18,18 +18,37 @@ COMMAND_ENDPOINTS = {
         "method": "POST",
         "payload": lambda: {},
     },
-    "getFileDirectory": {
-        "endpoint": f"{BASE_URL}/getFileDirectory",
+    "getDirectory": {
+        "endpoint": f"{BASE_URL}/getDirectory",
         "method": "POST",
         "payload": lambda: {},
     },
-    "setNewWorkingDirectory": {
-        "endpoint": f"{BASE_URL}/setNewWorkingDirectory",
+    "setNewDirectory": {
+        "endpoint": f"{BASE_URL}/setNewDirectory",
         "method": "POST",
-        "payload": lambda file_path: {"FilePath": file_path},
+        "payload": lambda folder, is_root_path, root_path: {
+            "TargetFolder": folder,
+            "isrootPathForSearchIsCurrentDir": is_root_path,
+            "rootPathForFolderSearch": root_path,
+        },
+    },
+    "startSNRAnalysis":{
+        "endpoint": f"{BASE_URL}/startSNRAnalysis",
+        "method": "POST",
+        "payload": lambda: {},
+    },
+    "startDefectDetection": {
+        "endpoint": f"{BASE_URL}/startDefectDetection",
+        "method": "POST",
+        "payload": lambda: {},
     },
 }
 
+'''"setNewDirectory": {
+    "endpoint": f"{BASE_URL}/setNewDirectory",
+    "method": "POST",
+    "payload": lambda file_path: {"FilePath": file_path, "make_search_for_folder": False, "isrootPathForSearchCurrentDir": False, "rootPathForSearch": ""},
+},'''
 
 def execute_command(command_name, *args):
     if command_name in COMMAND_ENDPOINTS:

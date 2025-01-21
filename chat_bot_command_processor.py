@@ -4,6 +4,7 @@ from queue import Queue
 from threading import Thread
 from command_process import execute_command
 import os
+
 # from command_listener import command_queue
 
 # TODO: replace it with reading this from file added to gitignore
@@ -58,20 +59,30 @@ def process_input(user_input):
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",  # Replace with "gpt-4" or other chat model if needed
             messages=[
-                {"role": "system", "content": "You are converter who transform input text into API commands"},
+                {"role": "system", "content": "You are a converter that transforms input text into API commands. "
+                    "Always respond with a command in valid JSON format. "
+                    "The JSON must include a 'command' key (string) and an 'args' key (list of values). "
+                    "Example of the correct format: {\"command\": \"setNewDirectory\", \"args\": [\"SomeFolder\", true, \"\"]}. "
+                    "Do not include additional words, symbols, or formatting outside of the JSON structure."},
                 # You are an assistant that helps to transform input text into commands in desired format
                 {
                     "role": "user",
                     "content": f"Interpret the following text: {user_input} into command."
                                f"Available commands: 'loadData' which requires file path as input, 'updatePlot', "
                                f"'getFileInformation' which  return string with information,"
-                               f"'getFileDirectory' which returns string with the full path to the folder where opened file is located,"
-                               f"'setNewWorkingDirectory' to change the working to the input argument. "
-                               f"Respond ONLY command in JSON format without additional words and symbols. Start respond with open bracket and 'command' and fill rst based on text analysis 'args', with 'args' as a list of values only (no key names in the list)."
+                               f"'getDirectory' which returns string with the full path to the folder where opened file is located,"
+                               f"'startSNRAnalysis' no argument POST method which opens window for  SNR analysis, "
+                               f"'startDefectDetection' no argument POST method which start window for defect detection, "
+                               f"'setNewDirectory' to set new the working directory with three arguments always: string TargetFolder, bool isrootPathForSearchIsCurrentDir, string rootPathForFolderSearch,"
+                               f"If the command specifies a directory path (e.g., 'in Documents folder'), resolve the directory name to its absolute path with isrootPathForSearchIsCurrentDir to be false"
+           f"using environment variables (e.g., '%USERPROFILE%\\Documents' for Windows). "
+           f"If no explicit search root is specified, set 'isrootPathForSearchIsCurrentDir' to True. "
+           f"Start response with open bracket, followed by 'command', and fill the rest based on the text analysis. "
+                               f"'args' should always be a list of values only (no key names in the list)."
                 }
             ],
             max_tokens=100,
-            temperature=0.5
+            temperature=0.2
         )
 
         response_text = response.choices[0].message['content'].strip()
