@@ -1,6 +1,17 @@
 import requests
 
 BASE_URL = "http://localhost:5000/api/app"
+# revise all the methods to be corectly defined as POST or GET:
+#  ______________________ REST principles ______________________
+# GET:
+# Use for retrieving data (read-only operations).
+# Parameters are included in the URL query string.
+# Should not modify the state of the application or server.
+#
+# POST:
+# Use for sending data to the server to initiate actions or modify state.
+# Parameters are included in the body, ensuring flexibility and better security for sensitive data.
+
 
 COMMAND_ENDPOINTS = {
     "loadData": {
@@ -19,9 +30,9 @@ COMMAND_ENDPOINTS = {
         "payload": lambda: {},
     },
     "getDirectory": {
-        "endpoint": f"{BASE_URL}/getDirectory",
-        "method": "POST",
-        "payload": lambda: {},
+        "endpoint": f"{BASE_URL}/getDirectory?folderName=Documents",
+        "method": "GET",
+
     },
     "setNewDirectory": {
         "endpoint": f"{BASE_URL}/setNewDirectory",
@@ -32,7 +43,7 @@ COMMAND_ENDPOINTS = {
             "rootPathForFolderSearch": root_path,
         },
     },
-    "startSNRAnalysis":{
+    "startSNRAnalysis": {
         "endpoint": f"{BASE_URL}/startSNRAnalysis",
         "method": "POST",
         "payload": lambda: {},
@@ -43,12 +54,13 @@ COMMAND_ENDPOINTS = {
         "payload": lambda: {},
     },
 }
-
+# "payload": lambda: {},  # get methods should not contain it
 '''"setNewDirectory": {
     "endpoint": f"{BASE_URL}/setNewDirectory",
     "method": "POST",
     "payload": lambda file_path: {"FilePath": file_path, "make_search_for_folder": False, "isrootPathForSearchCurrentDir": False, "rootPathForSearch": ""},
 },'''
+
 
 def execute_command(command_name, *args):
     if command_name in COMMAND_ENDPOINTS:
@@ -72,5 +84,3 @@ def execute_command(command_name, *args):
             print("Response:", response.text)
     else:
         print(f"Unknown command '{command_name}'")
-
-
