@@ -56,6 +56,7 @@ def process_input(user_input):
     Send the user's input to OpenAI's API to generate a command response.
     """
     try:
+        # TODO: it's NOT competition! Need to fix it
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",  # Replace with "gpt-4" or other chat model if needed
             messages=[
@@ -71,8 +72,8 @@ def process_input(user_input):
                                f"Available commands: 'loadData' which requires file path as input, 'updatePlot', "
                                f"'getFileInformation' which  return string with information,"
                                f"'getDirectory' which returns string with the full path to the folder where opened file is located,"
-                               f"'startSNRAnalysis' no argument POST method which opens window for  SNR analysis, "
-                               f"'startDefectDetection' no argument POST method which start window for defect detection, "
+                               f"'startSNRAnalysis' no argument method which makes analysis"
+                               f"'startDefectDetection' no argument method which do search for defects, "
                                f"'setNewDirectory' to set new the working directory with three arguments always: string TargetFolder, bool isrootPathForSearchIsCurrentDir, string rootPathForFolderSearch,"
                                f"If the command specifies a directory path (e.g., 'in Documents folder'), resolve the directory name to its absolute path with isrootPathForSearchIsCurrentDir to be false"
            f"using environment variables (e.g., '%USERPROFILE%\\Documents' for Windows). "
