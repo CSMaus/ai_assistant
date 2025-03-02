@@ -1,17 +1,24 @@
-import openai
+# here only convert commands to the json based on the keywords from input text
+# the idea is:
+# 1. for each command define list of keywords
+# 2. from input text extract the keywords
+# 3. compare keywords from the input text with the keywords from the command using similarity and
+#   build list of commands
+
+# need to define variables to store what actions were already done
+# *I e is file opened?
+# *What name of opened file?
+# *What analysis was done and what results do we have?
+# if we already did analysis for requested file, we have to ask user, should we remake analysis and prepare report
+
+
 import json
 from queue import Queue
 from threading import Thread
 from command_process import execute_command
 import os
-
-# from command_listener import command_queue
-
-# TODO: file added to gitignore (bcs it's my key)
-openai.api_key = ""
-with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
-    openai.api_key = file.read().strip()
-command_queue = Queue()
+import spacy
+from spacy.matcher import Matcher
 
 
 def parse_response(response_text):
@@ -42,14 +49,6 @@ def parse_response(response_text):
         print("Failed to parse response:", e)
         print("Raw response text:", response_text)  # For debugging purposes
         return None, []
-
-
-# TODO:
-# okay, will make the input - read the list of the commands with short description for each (few words)
-# then teh output will be the list of commands by their names, arguments and time delay for each before sending next one
-# maybe some commands will call functions in python
-# but better will be to sent them all into program - more clear and universal for application code
-
 
 def process_input(user_input):
     """
