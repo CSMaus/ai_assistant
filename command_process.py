@@ -43,7 +43,7 @@ COMMAND_ENDPOINTS = {
             "rootPathForFolderSearch": root_path,
         },
     },
-    "startSNRAnalysis": {
+    "doAnalysisSNR": {
         "endpoint": f"{BASE_URL}/startSNRAnalysis",
         "method": "POST",
         "payload": lambda: {},

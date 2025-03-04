@@ -20,26 +20,20 @@ import os
 import spacy
 from spacy.matcher import Matcher
 
+command_queue = Queue()
 
 def parse_response(response_text):
-    """
-    Parse the response text from the chat-bot to identify the command and arguments.
-    """
     try:
-        # Remove backticks and ensure response starts with `{`
         response_text = response_text.strip("`").strip()
         if not response_text.startswith("{"):
             raise ValueError("Response does not contain valid JSON")
 
-        # Attempt to load JSON response
         response_data = json.loads(response_text)
-        print("Parsed response data:", response_data)  # Debugging print
+        print("Parsed response data:", response_data)
 
-        # Extract command and args, ensuring they're correctly structured
         command = response_data.get("command")
         args = response_data.get("args", [])
 
-        # Verify command and args are in the expected format
         if not command or not isinstance(args, list):
             raise ValueError("Parsed response does not contain expected 'command' and 'args' format")
 
@@ -47,18 +41,15 @@ def parse_response(response_text):
         return command, args
     except Exception as e:
         print("Failed to parse response:", e)
-        print("Raw response text:", response_text)  # For debugging purposes
+        print("Raw response text:", response_text) # debug it!
         return None, []
 
 def process_input(user_input):
-    """
-    Send the user's input to OpenAI's API to generate a command response.
-    """
     try:
         # TODO: it's NOT competition! Need to fix it
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",  # Replace with "gpt-4" or other chat model if needed
-            messages=[
+            model="gpt-4o-mini",
+            mmessages=[
                 {"role": "system", "content": "You are a converter that transforms input text into API commands. "
                     "Always respond with a command in valid JSON format. "
                     "The JSON must include a 'command' key (string) and an 'args' key (list of values). "
@@ -68,10 +59,10 @@ def process_input(user_input):
                 {
                     "role": "user",
                     "content": f"Interpret the following text: {user_input} into command."
-                               f"Available commands: 'loadData' which requires file path as input, 'updatePlot', "
+                               f"Available commands: 'loadData' which load data file only requires file path as input, 'updatePlot', "
                                f"'getFileInformation' which  return string with information,"
                                f"'getDirectory' which returns string with the full path to the folder where opened file is located,"
-                               f"'startSNRAnalysis' no argument method which makes analysis"
+                               f"'doAnalysisSNR' analyze the data  it using signal to noise ratio (SNR), no argument method"
                                f"'startDefectDetection' no argument method which do search for defects, "
                                f"'setNewDirectory' to set new the working directory with three arguments always: string TargetFolder, bool isrootPathForSearchIsCurrentDir, string rootPathForFolderSearch,"
                                f"If the command specifies a directory path (e.g., 'in Documents folder'), resolve the directory name to its absolute path with isrootPathForSearchIsCurrentDir to be false"
@@ -91,7 +82,6 @@ def process_input(user_input):
             response_text = response_text[response_text.index('{'):]
         print("Chat-bot Response:", response_text)
 
-        # Parse the response to extract command and arguments
         command, args = parse_response(response_text)
 
         if command:
@@ -113,9 +103,6 @@ def command_listener():
 
 
 def run_chat_bot():
-    """
-    Continuously listen for user input, process it with the chatbot, and queue the command.
-    """
     print("Type your command ('quit' to exit):")
     while True:
         user_input = input(">> ")
