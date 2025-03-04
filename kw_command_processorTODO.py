@@ -1,18 +1,26 @@
-import openai
+# here only convert commands to the json based on the keywords from input text
+# the idea is:
+# 1. for each command define list of keywords
+# 2. from input text extract the keywords
+# 3. compare keywords from the input text with the keywords from the command using similarity and
+#   build list of commands
+
+# need to define variables to store what actions were already done
+# *I e is file opened?
+# *What name of opened file?
+# *What analysis was done and what results do we have?
+# if we already did analysis for requested file, we have to ask user, should we remake analysis and prepare report
+
+
 import json
 from queue import Queue
 from threading import Thread
 from command_process import execute_command
 import os
+import spacy
+from spacy.matcher import Matcher
 
-# from command_listener import command_queue
-
-# TODO: file added to gitignore (bcs it's my key)
-openai.api_key = ""
-with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
-    openai.api_key = file.read().strip()
 command_queue = Queue()
-
 
 def parse_response(response_text):
     try:
@@ -29,26 +37,19 @@ def parse_response(response_text):
         if not command or not isinstance(args, list):
             raise ValueError("Parsed response does not contain expected 'command' and 'args' format")
 
+        # Return parsed values
         return command, args
     except Exception as e:
         print("Failed to parse response:", e)
-        print("Raw response text:", response_text)
+        print("Raw response text:", response_text) # debug it!
         return None, []
-
-
-# TODO:
-# okay, will make the input - read the list of the commands with short description for each (few words)
-# then teh output will be the list of commands by their names, arguments and time delay for each before sending next one
-# maybe some commands will call functions in python
-# but better will be to sent them all into program - more clear and universal for application code
-
 
 def process_input(user_input):
     try:
         # TODO: it's NOT competition! Need to fix it
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
-            messages=[
+            mmessages=[
                 {"role": "system", "content": "You are a converter that transforms input text into API commands. "
                     "Always respond with a command in valid JSON format. "
                     "The JSON must include a 'command' key (string) and an 'args' key (list of values). "
@@ -61,7 +62,7 @@ def process_input(user_input):
                                f"Available commands: 'loadData' which load data file only requires file path as input, 'updatePlot', "
                                f"'getFileInformation' which  return string with information,"
                                f"'getDirectory' which returns string with the full path to the folder where opened file is located,"
-                               f"'analysisSNR' analyze the data  it using signal to noise ratio (SNR), no argument method"
+                               f"'doAnalysisSNR' analyze the data  it using signal to noise ratio (SNR), no argument method"
                                f"'startDefectDetection' no argument method which do search for defects, "
                                f"'setNewDirectory' to set new the working directory with three arguments always: string TargetFolder, bool isrootPathForSearchIsCurrentDir, string rootPathForFolderSearch,"
                                f"If the command specifies a directory path (e.g., 'in Documents folder'), resolve the directory name to its absolute path with isrootPathForSearchIsCurrentDir to be false"

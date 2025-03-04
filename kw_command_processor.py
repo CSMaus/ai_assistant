@@ -1,106 +1,118 @@
-# here only convert commands to the json based on the keywords from input text
-# the idea is:
-# 1. for each command define list of keywords
-# 2. from input text extract the keywords
-# 3. compare keywords from the input text with the keywords from the command using similarity and
-#   build list of commands
-
-# need to define variables to store what actions were already done
-# *I e is file opened?
-# *What name of opened file?
-# *What analysis was done and what results do we have?
-# if we already did analysis for requested file, we have to ask user, should we remake analysis and prepare report
-
-
 import json
 from queue import Queue
 from threading import Thread
 from command_process import execute_command
 import os
+import numpy as np
 import spacy
-from spacy.matcher import Matcher
+from sklearn.metrics.pairwise import cosine_similarity
+import re
+
+# now we will use only english. Other languages will be added later
+nlp = spacy.load("en_core_web_md")
 
 command_queue = Queue()
 
-def parse_response(response_text):
-    try:
-        response_text = response_text.strip("`").strip()
-        if not response_text.startswith("{"):
-            raise ValueError("Response does not contain valid JSON")
+command_keywords = {
+    "loadData": ["load", "open", "file", "import", "load file"],
+    "updatePlot": ["refresh", "update", "redraw", "plot", "modify plot"],
+    "getFileInformation": ["info", "details", "metadata", "information"],
+    "getDirectory": ["folder", "path", "location", "directory", "current folder"],
+    "doAnalysisSNR": ["snr", "analyze", "signal analysis", "noise ratio", "analyze data", "do analysis", "analysis"],
+    "startDefectDetection": ["defect", "detect", "flaw", "detect defects", "search defects", "find defects"],
+    "setNewDirectory": ["change folder", "move", "new directory", "set path", "update folder", "change directory", "update directory"]
+}
 
-        response_data = json.loads(response_text)
-        print("Parsed response data:", response_data)
+def extract_keywords(text):
+    doc = nlp(text.lower())
+    return [token.lemma_ for token in doc if token.pos_ in ["NOUN", "VERB"] and token.has_vector]
 
-        command = response_data.get("command")
-        args = response_data.get("args", [])
+def get_best_matching_commands(user_keywords, threshold=0.5):
+    matched_commands = []
 
-        if not command or not isinstance(args, list):
-            raise ValueError("Parsed response does not contain expected 'command' and 'args' format")
+    for command, keywords in command_keywords.items():
+        command_vectors = [nlp(keyword).vector for keyword in keywords if nlp(keyword).has_vector]
 
-        # Return parsed values
-        return command, args
-    except Exception as e:
-        print("Failed to parse response:", e)
-        print("Raw response text:", response_text) # debug it!
-        return None, []
+        for user_keyword in user_keywords:
+            user_vector = nlp(user_keyword).vector
+            if not np.any(user_vector):
+                continue
+
+            similarities = [cosine_similarity([user_vector], [cmd_vector])[0][0] for cmd_vector in command_vectors]
+            avg_similarity = np.mean(similarities) if similarities else 0
+
+            if avg_similarity > threshold:
+                matched_commands.append((command, avg_similarity))
+
+    matched_commands = sorted(set(matched_commands), key=lambda x: x[1], reverse=True)
+
+    # only command names
+    return [cmd[0] for cmd in matched_commands]
+
+def extract_arguments(command, user_input):
+    """Extracts necessary arguments for commands that require them."""
+    args = []
+
+    if command == "loadData":
+        # extract fpd or opd file
+        match = re.search(r"(\b\w+\.(fpd|opd)\b)", user_input)
+
+        # TODO: remake to get some file not by name:
+        # TODO: i e it can be last created file in folder, or all files in folder
+        # TODO: i e it can be folder, not file itself
+        if match:
+            args.append(match.group(1))
+        else:
+            folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
+            if folder_match:
+                folder_path = folder_match.group(1)
+                args.append(folder_path)
+
+                # this part will be used later, but I think, I'll make it in program itself, not here
+                '''latest_file = get_latest_file_in_folder(folder_path)
+                if latest_file:
+                    args.append(latest_file)
+                else:
+                    args.append(folder_path)'''
+
+            else:
+                print("No valid file or folder found to load data.")
+
+    elif command == "setNewDirectory":
+        match = re.search(r"(?:(?:to|into|set|change to|folder is|directory is| is|)\s+)?([\w/\\]+)", user_input)
+        if match:
+            folder = match.group(1)
+            # default parameters
+            args.extend([folder, False, ""])
+        else:
+            print("No valid folder name found to update directory.")
+
+    return args
+
+
 
 def process_input(user_input):
+    """Process user input, extract commands, arguments, and add to queue."""
     try:
-        # TODO: it's NOT competition! Need to fix it
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            mmessages=[
-                {"role": "system", "content": "You are a converter that transforms input text into API commands. "
-                    "Always respond with a command in valid JSON format. "
-                    "The JSON must include a 'command' key (string) and an 'args' key (list of values). "
-                    "Example of the correct format: {\"command\": \"setNewDirectory\", \"args\": [\"SomeFolder\", true, \"\"]}. "
-                    "Do not include additional words, symbols, or formatting outside of the JSON structure."},
-                # You are an assistant that helps to transform input text into commands in desired format
-                {
-                    "role": "user",
-                    "content": f"Interpret the following text: {user_input} into command."
-                               f"Available commands: 'loadData' which load data file only requires file path as input, 'updatePlot', "
-                               f"'getFileInformation' which  return string with information,"
-                               f"'getDirectory' which returns string with the full path to the folder where opened file is located,"
-                               f"'doAnalysisSNR' analyze the data  it using signal to noise ratio (SNR), no argument method"
-                               f"'startDefectDetection' no argument method which do search for defects, "
-                               f"'setNewDirectory' to set new the working directory with three arguments always: string TargetFolder, bool isrootPathForSearchIsCurrentDir, string rootPathForFolderSearch,"
-                               f"If the command specifies a directory path (e.g., 'in Documents folder'), resolve the directory name to its absolute path with isrootPathForSearchIsCurrentDir to be false"
-           f"using environment variables (e.g., '%USERPROFILE%\\Documents' for Windows). "
-           f"If no explicit search root is specified, set 'isrootPathForSearchIsCurrentDir' to True. "
-           f"Start response with open bracket, followed by 'command', and fill the rest based on the text analysis. "
-                               f"'args' should always be a list of values only (no key names in the list)."
-                }
-            ],
-            max_tokens=100,
-            temperature=0.2
-        )
+        user_keywords = extract_keywords(user_input)
+        matched_commands = get_best_matching_commands(user_keywords)
 
-        response_text = response.choices[0].message['content'].strip()
-        response_text = response_text.strip("```")
-        if '{' in response_text:
-            response_text = response_text[response_text.index('{'):]
-        print("Chat-bot Response:", response_text)
-
-        command, args = parse_response(response_text)
-
-        if command:
-            command_queue.put((command, args))
-            # command_queue.put({"command": command, "args": args})
-            print(f"Command '{command}' added to queue with args: {args}")
+        if matched_commands:
+            for command in matched_commands:
+                args = extract_arguments(command, user_input)
+                command_queue.put((command, args))
+                print(f"Command '{command}' added to queue with args: {args}")
         else:
-            print("Failed to interpret command.")
+            print("No matching command found.")
 
     except Exception as e:
-        print("Error communicating with OpenAI:", e)
-
+        print("Error processing input:", e)
 
 def command_listener():
     while True:
         command, args = command_queue.get()
         execute_command(command, *args)
         command_queue.task_done()
-
 
 def run_chat_bot():
     print("Type your command ('quit' to exit):")
@@ -109,7 +121,6 @@ def run_chat_bot():
         if user_input.lower() == "quit":
             break
         process_input(user_input)
-
 
 if __name__ == "__main__":
     listener_thread = Thread(target=command_listener)
