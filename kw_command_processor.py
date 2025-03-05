@@ -10,7 +10,9 @@ import re
 
 # now we will use only english. Other languages will be added later
 nlp = spacy.load("en_core_web_md")
-
+# TODO: check if file is opened, if ues check is it the file we want to work with and load another if not
+# TODO: add delay (in c#) to wait for data file to be loaded before making manipulations with it
+opened_file_name = ""
 command_queue = Queue()
 
 command_keywords = {
@@ -50,7 +52,6 @@ def get_best_matching_commands(user_keywords, threshold=0.5):
     return [cmd[0] for cmd in matched_commands]
 
 def extract_arguments(command, user_input):
-    """Extracts necessary arguments for commands that require them."""
     args = []
 
     if command == "loadData":
@@ -77,7 +78,6 @@ def extract_arguments(command, user_input):
 
             else:
                 print("No valid file or folder found to load data.")
-
     elif command == "setNewDirectory":
         match = re.search(r"(?:(?:to|into|set|change to|folder is|directory is| is|)\s+)?([\w/\\]+)", user_input)
         if match:
@@ -92,7 +92,7 @@ def extract_arguments(command, user_input):
 
 
 def process_input(user_input):
-    """Process user input, extract commands, arguments, and add to queue."""
+    """extract commands, arguments, and add to queue"""
     try:
         user_keywords = extract_keywords(user_input)
         matched_commands = get_best_matching_commands(user_keywords)
