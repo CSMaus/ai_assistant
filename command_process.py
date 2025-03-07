@@ -32,6 +32,7 @@ COMMAND_ENDPOINTS = {
     "getDirectory": {
         "endpoint": f"{BASE_URL}/getDirectory?folderName=Documents",
         "method": "GET",
+        "payload": lambda: {},
 
     },
     "setNewDirectory": {
