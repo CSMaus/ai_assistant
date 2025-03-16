@@ -3,7 +3,7 @@
 import sys
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import Qt
-# TODO: place correct command here
+# TODO: place correct commands here
 from command_process import process_input
 
 
@@ -17,7 +17,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(central_widget)
 
         layout = QtWidgets.QVBoxLayout(central_widget)
-        # Chat display area
+
         self.chatDisplay = QtWidgets.QTextBrowser(self)
         layout.addWidget(self.chatDisplay)
 
@@ -36,11 +36,9 @@ class ChatWindow(QtWidgets.QMainWindow):
     def send_message(self):
         user_text = self.inputField.text().strip()
         if user_text:
-            # Display the user message in the chat area
             self.chatDisplay.append(f"<b>You:</b> {user_text}")
-            # Process the input using your command processor
             process_input(user_text)
-            # For demonstration, append a placeholder assistant response
+            # placeholder for response
             self.chatDisplay.append("<b>Assistant:</b> Command processed.")
             self.inputField.clear()
 

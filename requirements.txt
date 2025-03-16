@@ -1,6 +1,14 @@
-numpy==1.24.4
+fastapi==0.115.11
 openai==0.28.0
+ollama==0.4.7
+openai==1.66.3
+pydantic==2.10.6
+PyQt6==6.8.1
 PyQt6_sip==13.10.0
+Requests==2.32.3
+scikit_learn==1.6.1
 spacy==3.8.3
-torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
+torch==2.6.0
 transformers==4.49.0
+uvicorn==0.34.0
+numpy==1.24.4
