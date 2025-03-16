@@ -1,3 +1,6 @@
+# TODO: This is a note: here I get commands for input NL text input and process them with spacy+sklearn
+# TODO: for correct command extraction and mistral (7.25B quantization Q4_0, 4.1GB) for arg extraction
+# TODO: I think to remake to make all processing via mistral to get accurate commands and args extractions
 import json
 from queue import Queue
 from threading import Thread
@@ -22,7 +25,7 @@ opened_file_name = ""
 command_queue = Queue()
 
 command_keywords = {
-    "loadData": ["load", "open", "file", "import", "load file"],
+    "loadData": ["load", "open", "load file", "open file", "file", "load data", "open data", "open datafile", "load datafile", "datafile"],
     "updatePlot": ["refresh", "update", "redraw", "plot", "modify plot"],
     "getFileInformation": ["info", "details", "metadata", "information"],
     "getDirectory": ["current folder", "current path", "current location", "current directory", "current folder"],
@@ -40,9 +43,17 @@ def extract_folder_ollama(user_input):
     response = ollama.chat(model="tinyllama", messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}])'''
+
+def extract_filename_ollama(user_input):
+    prompt = f"'{user_input}'"
+    '''system_prompt = f"You are file name extractor. You have to return ONLY file name which" \
+                    f" you find in input text. All other responses are forbidden!"
+    response = ollama.chat(model="tinyllama", messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}])'''
     #
     # tinyllama is too tiny to execute commands correctly
-    system_prompt = "Extract only the folder name from the input. Return only the folder name. No extra words. No explanations. No formatting."
+    system_prompt = "Extract only the file name from the input. Return only the file name. No extra words. No explanations. No formatting."
     response = ollama.generate(
         model="mistral",
         prompt=f"{system_prompt}\n\n{user_input}",
@@ -56,7 +67,9 @@ def extract_keywords(text):
     doc = nlp(text.lower())
     return [token.lemma_ for token in doc if token.pos_ in ["NOUN", "VERB"] and token.has_vector]
 
-def get_best_matching_commands(user_keywords, threshold=0.5):
+def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95):
+    # TODO: maybe remake this function to return cosine similarity for each command and choose the one with largest value?
+
     matched_commands = []
 
     for command, keywords in command_keywords.items():
@@ -69,8 +82,8 @@ def get_best_matching_commands(user_keywords, threshold=0.5):
 
             similarities = [cosine_similarity([user_vector], [cmd_vector])[0][0] for cmd_vector in command_vectors]
             avg_similarity = np.mean(similarities) if similarities else 0
-
-            if avg_similarity > threshold:
+            max_similarity = max(similarities) if similarities else 0
+            if avg_similarity > threshold or max_similarity > max_threshold:
                 matched_commands.append((command, avg_similarity))
 
     matched_commands = sorted(set(matched_commands), key=lambda x: x[1], reverse=True)
@@ -82,29 +95,35 @@ def extract_arguments(command, user_input):
     args = []
 
     if command == "loadData":
-        # extract fpd or opd file
-        match = re.search(r"(\b\w+\.(fpd|opd)\b)", user_input)
-
-        # TODO: remake to get some file not by name:
-        # TODO: i e it can be last created file in folder, or all files in folder
-        # TODO: i e it can be folder, not file itself
-        if match:
-            args.append(match.group(1))
+        # TODO: it works well, but need to add model warmup (first time it takes few sec to set)
+        filename = extract_filename_ollama(user_input).strip()
+        if filename:
+            args.append(filename)
         else:
-            folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
-            if folder_match:
-                folder_path = folder_match.group(1)
-                args.append(folder_path)
+            # old code, should be replaced with llm for correct file name extraction
+            # extract fpd or opd file
+            match = re.search(r"(\b\w+\.(fpd|opd)\b)", user_input)
 
-                # this part will be used later, but I think, I'll make it in program itself, not here
-                '''latest_file = get_latest_file_in_folder(folder_path)
-                if latest_file:
-                    args.append(latest_file)
-                else:
-                    args.append(folder_path)'''
-
+            # TODO: remake to get some file not by name:
+            # TODO: i e it can be last created file in folder, or all files in folder
+            # TODO: i e it can be folder, not file itself
+            if match:
+                args.append(match.group(1))
             else:
-                print("No valid file or folder found to load data.")
+                folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
+                if folder_match:
+                    folder_path = folder_match.group(1)
+                    args.append(folder_path)
+
+                    # this part will be used later, but I think, I'll make it in program itself, not here
+                    '''latest_file = get_latest_file_in_folder(folder_path)
+                    if latest_file:
+                        args.append(latest_file)
+                    else:
+                        args.append(folder_path)'''
+
+                else:
+                    print("No valid file or folder found to load data.")
     elif command == "setNewDirectory":
         # match = re.search(r"(?:(?:to|into|set|set new|change to|folder is|directory is| is| new is| new to|)\s+)?([\w/\\]+)", user_input)
 
