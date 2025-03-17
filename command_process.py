@@ -80,8 +80,43 @@ def execute_command(command_name, *args):
         if response.status_code == 200:
             print(f"Command '{command_name}' executed successfully.")
             print("Response:", response.json())
+
         else:
             print(f"Failed to execute command '{command_name}'. Status code:", response.status_code)
             print("Response:", response.text)
     else:
         print(f"Unknown command '{command_name}'")
+
+
+def execute_command_gui(command_name, *args):
+    fail_success_msg = ""
+    response_msg = ""
+    if command_name in COMMAND_ENDPOINTS:
+        command_info = COMMAND_ENDPOINTS[command_name]
+        endpoint = command_info["endpoint"]
+        method = command_info["method"]
+        payload = command_info["payload"](*args)
+
+        if method == "POST":
+            response = requests.post(endpoint, json=payload)
+        elif method == "GET":
+            response = requests.get(endpoint, params=payload)
+        else:
+            raise ValueError("Unsupported HTTP method")
+
+        if response.status_code == 200:
+            print(f"Command '{command_name}' executed successfully.")
+            print("Response:", response.json())
+            fail_success_msg = f"Command '{command_name}' executed successfully."
+            response_msg = response.json()
+
+        else:
+            print(f"Failed to execute command '{command_name}'. Status code:", response.status_code)
+            print("Response:", response.text)
+            fail_success_msg = f"Failed to execute command '{command_name}'. Status code: {response.status_code}"
+            response_msg = response.text
+    else:
+        print(f"Unknown command '{command_name}'")
+        fail_success_msg = f"Unknown command '{command_name}'"
+
+    return fail_success_msg, response_msg

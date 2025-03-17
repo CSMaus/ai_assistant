@@ -1,12 +1,32 @@
 # TODO: this is note: NL to commands processor for my PAUT SW with GUI like chat-bot (AI Assistant)
 # TODO: place parameters of settings into separate group
 import sys
-from PyQt6 import QtWidgets, QtGui
+from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import Qt
-from PyQt6 import QtCore
+from queue import Queue
+from threading import Thread
+from ai_functions_keeper import *
 # TODO: place correct commands here
 # from command_process import process_input
 
+
+command_queue = Queue()
+def process_input(user_input):
+    progress_txt = []
+    try:
+        user_keywords = extract_keywords(user_input)
+        matched_commands = get_best_matching_commands(user_keywords)
+        if matched_commands:
+            for command in matched_commands:
+                args = extract_arguments(command, user_input)
+                command_queue.put((command, args))
+                progress_txt = status_message(command, args)
+        else:
+            progress_txt = "No matching commands found."
+    except Exception as e:
+        progress_txt = f"Error processing input: {e}"
+
+    return progress_txt
 
 class TextEdit(QtWidgets.QTextEdit):
     def __init__(self, alignment='right', bubble_color="#323232", parent=None):
@@ -73,6 +93,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
+
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -111,6 +132,35 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.sendButton.clicked.connect(self.send_message)
         self.inputField.returnPressed.connect(self.send_message)
 
+        self.command_queue = Queue()
+        self.listener_thread = Thread(target=self.command_listener, daemon=True)
+        self.listener_active = True
+        self.listener_thread = self.listener_thread.start()
+
+    def command_listener(self):
+        while self.listener_active:
+            command, args = command_queue.get()
+            msg, response = execute_command_gui(command, *args)
+            QtCore.QMetaObject.invokeMethod(
+                self, "display_assistant_message",
+                QtCore.Qt.ConnectionType.QueuedConnection,
+                QtCore.Q_ARG(str, response)
+            )
+            command_queue.task_done()
+
+    # to handle threads and GUI safely
+    @QtCore.pyqtSlot(str)
+    def display_assistant_message(self, response):
+        assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
+        assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{response}</span>')
+        assistant_bubble.update_size()
+        self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
+        QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
+
+    def auto_scroll_down(self):
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        scroll_bar.setValue(scroll_bar.maximum())
+
     def send_message(self):
         user_text = self.inputField.text().strip()
         if user_text:
@@ -119,16 +169,27 @@ class ChatWindow(QtWidgets.QMainWindow):
             user_bubble.update_size()
             self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
 
-            response = f"Command processed. User input was: {user_text}"
+            progress_txt = process_input(user_text)
+            # response = f"Command processed. User input was: {user_text}"
             assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
-            assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{response}</span>')
+            assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{progress_txt}<br></span>')
             assistant_bubble.update_size()
             self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
 
             self.inputField.clear()
+            self.chat_container.adjustSize()
+            QtCore.QTimer.singleShot(0, self.auto_scroll)
+
+    def auto_scroll(self):
+        QtCore.QTimer.singleShot(0, self.auto_scroll_bottom)
+
+    def auto_scroll_bottom(self):
+        scroll_bar = self.scroll_area.verticalScrollBar()
+        scroll_bar.setValue(scroll_bar.maximum())
 
 
 if __name__ == "__main__":
+    command_queue = Queue()
     app = QtWidgets.QApplication(sys.argv)
     app.setStyleSheet("QWidget { background-color: #202020; }")
     window = ChatWindow()
