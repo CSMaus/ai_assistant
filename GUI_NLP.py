@@ -1,5 +1,6 @@
 # TODO: this is note: NL to commands processor for my PAUT SW with GUI like chat-bot (AI Assistant)
 # TODO: place parameters of settings into separate group
+# TODO: solve the error: if I'll try to load data first time via assistant - I'll receive error
 import sys
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import Qt
@@ -18,9 +19,12 @@ def process_input(user_input):
         matched_commands = get_best_matching_commands(user_keywords)
         if matched_commands:
             for command in matched_commands:
-                args = extract_arguments(command, user_input)
+                args, warning_txt = extract_arguments(command, user_input)
                 command_queue.put((command, args))
+
                 progress_txt = status_message(command, args)
+                if warning_txt:
+                    progress_txt += f"\n{warning_txt}"
         else:
             progress_txt = "No matching commands found."
     except Exception as e:
@@ -101,7 +105,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.chat_container = QtWidgets.QWidget()
         self.chat_layout = QtWidgets.QVBoxLayout(self.chat_container)
         self.chat_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.chat_layout.setSpacing(10)  # Fixed spacing between messages
+        self.chat_layout.setSpacing(5)  # Fixed spacing between messages
 
         self.scroll_area.setWidget(self.chat_container)
         main_layout.addWidget(self.scroll_area)
@@ -120,9 +124,12 @@ class ChatWindow(QtWidgets.QMainWindow):
         input_layout = QtWidgets.QHBoxLayout()
         self.inputField = QtWidgets.QLineEdit(self)
         self.sendButton = QtWidgets.QPushButton("Send", self)
+        self.inputField.setStyleSheet("color: #FFFFFF;")
+        self.sendButton.setStyleSheet("color: #FFFFFF;")
         input_layout.addWidget(self.inputField)
         input_layout.addWidget(self.sendButton)
         main_layout.addLayout(input_layout)
+
 
         self.user_color = QtGui.QColor("#323232")  #3C3C3C")  # #272727
         self.assist_color = QtGui.QColor("#242424")
@@ -152,7 +159,7 @@ class ChatWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(str)
     def display_assistant_message(self, response):
         assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
-        assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{response}</span>')
+        assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}">{response}</span>')
         assistant_bubble.update_size()
         self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
         QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
