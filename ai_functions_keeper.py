@@ -24,7 +24,7 @@ opened_file_name = ""
 command_queue = Queue()
 
 command_keywords = {
-    "loadData": ["load", "open", "load file", "open file", "file", "load data", "open data", "open datafile", "load datafile", "datafile"],
+    "loadData": ["load", "open", "load file", "open file", "file", "load data", "open data", "open datafile", "load datafile", "datafile", "open"],
     "updatePlot": ["refresh", "update", "redraw", "plot", "modify plot"],
     "getFileInformation": ["info", "details", "metadata", "information"],
     "getDirectory": ["current folder", "current path", "current location", "current directory", "current folder"],

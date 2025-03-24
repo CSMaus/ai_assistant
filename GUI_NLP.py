@@ -1,14 +1,18 @@
-# TODO: this is note: NL to commands processor for my PAUT SW with GUI like chat-bot (AI Assistant)
-# TODO: place parameters of settings into separate group
-# TODO: solve the error: if I'll try to load data first time via assistant - I'll receive error
 import sys
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import Qt
 from queue import Queue
 from threading import Thread
 from ai_functions_keeper import *
-# TODO: place correct commands here
-# from command_process import process_input
+
+# TODO: fix commands query: now it set commands infinitely
+# TODO: modify messages in c# to be more user friendly
+# TODO: add commands to make complex requests, like "Analyse all file and prepare report"
+# TODO: replace NL processing to be checked via LLM (now it's not fully correct)
+# TODO: fix the assistant responses for mistakes
+
+# TODO: use LLM_1 requests for search for correct command based on command_name and its description from user input
+# TODO: if find matched command, then use LLM2 to extract arguments from user input required for this command
 
 
 command_queue = Queue()
@@ -18,13 +22,30 @@ def process_input(user_input):
         user_keywords = extract_keywords(user_input)
         matched_commands = get_best_matching_commands(user_keywords)
         if matched_commands:
-            for command in matched_commands:
+            command_idx = 0
+            # place only one command into queue - sometimes errors appear to run same commands infinite times
+            while (command_idx < len(matched_commands) and command_queue.empty()):
+                command = matched_commands[command_idx]
+                args, warning_txt = extract_arguments(command, user_input)
+                command_queue.put((command, args))
+                command_idx += 1
+                progress_txt = status_message(command, args)
+                if warning_txt:
+                    progress_txt += f"\n{warning_txt}"
+
+                if not command_queue.empty():
+                    break
+
+
+            '''for command in matched_commands:
                 args, warning_txt = extract_arguments(command, user_input)
                 command_queue.put((command, args))
 
                 progress_txt = status_message(command, args)
                 if warning_txt:
-                    progress_txt += f"\n{warning_txt}"
+                    progress_txt += f"\n{warning_txt}"'''
+
+
         else:
             progress_txt = "No matching commands found."
     except Exception as e:
@@ -142,7 +163,8 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.command_queue = Queue()
         self.listener_thread = Thread(target=self.command_listener, daemon=True)
         self.listener_active = True
-        self.listener_thread = self.listener_thread.start()
+        # self.listener_thread = self.listener_thread.start() # this is bug
+        self.listener_thread.start()
 
     def command_listener(self):
         while self.listener_active:
@@ -170,22 +192,48 @@ class ChatWindow(QtWidgets.QMainWindow):
 
     def send_message(self):
         user_text = self.inputField.text().strip()
+
+        if user_text.lower() in ["quit", "exit", "bye"]:
+            self.listener_active = False
+            self.close()
+            sys.exit()
+
         if user_text:
-            user_bubble = TextEdit(alignment='right', bubble_color=self.user_color.name())
+            user_bubble = TextEdit(alignment='left', bubble_color=self.user_color.name())
             user_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>You:</b><br>{user_text}</span>')
             user_bubble.update_size()
             self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
 
-            progress_txt = process_input(user_text)
-            # response = f"Command processed. User input was: {user_text}"
-            assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
-            assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{progress_txt}<br></span>')
-            assistant_bubble.update_size()
-            self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
-
             self.inputField.clear()
             self.chat_container.adjustSize()
             QtCore.QTimer.singleShot(0, self.auto_scroll)
+
+            # place it in different thread
+            # progress_txt = process_input(user_text)
+            Thread(target=self.process_user_input, args=(user_text,), daemon=True).start()
+
+            # place assistant bubble in separate function with separate thread
+            # response = f"Command processed. User input was: {user_text}"
+            # assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
+            # assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{progress_txt}<br></span>')
+            # assistant_bubble.update_size()
+            # self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
+
+    def process_user_input(self, user_text):
+        progress_txt = process_input(user_text)
+        QtCore.QMetaObject.invokeMethod(
+            self, "display_assistant_message",
+            QtCore.Qt.ConnectionType.QueuedConnection,
+            QtCore.Q_ARG(str, progress_txt))
+
+    @QtCore.pyqtSlot(str)
+    def display_assistant_message(self, response):
+        assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
+        assistant_bubble.setHtml(
+            f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{response}</span>')
+        assistant_bubble.update_size()
+        self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
+        QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
 
     def auto_scroll(self):
         QtCore.QTimer.singleShot(0, self.auto_scroll_bottom)
