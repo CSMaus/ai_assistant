@@ -47,6 +47,7 @@ def process_input(user_input):
                 progress_txt = "No matching commands found."
         else:
             command = get_command_ollama(user_input)
+            # command = get_command_gpt(user_input)
             if command is not None:
                 command = command.strip()
                 print(f"Command received from ollama is {command}")
@@ -56,8 +57,12 @@ def process_input(user_input):
                     progress_txt = status_message(command, args)
                     if warning_txt:
                         progress_txt += f"\n{warning_txt}"
+                elif command == ", ".join(command_names_list):
+                    progress_txt = command
                 else:
-                    progress_txt = "I'm working on implementing interaction with assistant outside of the command processing"
+                    # progress_txt = chat_with_gpt(user_input)
+                    progress_txt = chat_with_ollama(user_input)
+                    # progress_txt = "I'm working on implementing interaction with assistant outside of the command processing"
 
             else:
                 progress_txt = "Sorry, I didn't understand you"

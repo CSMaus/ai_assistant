@@ -13,7 +13,7 @@ import re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import ollama
-from prompts import command_name_extraction
+from prompts import command_name_extraction, commands_description
 
 
 # now we will use only english. Other languages will be added later
@@ -37,6 +37,207 @@ command_keywords = {
 command_names_list = ["loadData", "updatePlot", "getFileInformation", "getDirectory",
                 "doAnalysisSNR", "startDefectDetection", "setNewDirectory"]
 
+
+
+############################   CHAT GPT API   #################
+import openai
+import os
+openai.api_key = ""
+with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
+    openai.api_key = file.read().strip()
+
+def get_command_gpt(user_input):
+    try:
+        # TODO: it's NOT competition! Need to fix it
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": command_name_extraction},
+                {"role": "user", "content": user_input }
+            ],
+            max_tokens=100,
+            temperature=0
+        )
+        response_text = response.choices[0].message['content'].strip()
+        response_text = response_text.strip("```")
+        return response_text
+    except Exception as e:
+        print("Error communicating with OpenAI:", e)
+        return None
+
+def chat_with_gpt(user_input):
+    try:
+        # TODO: it's NOT competition! Need to fix it
+        system_prompt = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.\n
+                    Your primary role is to provide information related to **ultrasonic testing, nondestructive testing (NDT), and PAUT data analysis**.\n
+                    Additionally, you can send commands to the software. The list of valid commands you can use is: 
+                    {commands_description}
+                    #### Strict Rules:\n
+                    - You **MUST NOT** answer questions that are unrelated to PAUT, ultrasonic testing, or NDT.\n
+                    - If a user asks something outside of your expertise, respond with:  \n
+                    *"I am designed only for PAUT and ultrasonic testing-related tasks."*\n
+                    - You **MUST NOT** generate or provide programming code.\n
+                    - You **CANNOT** discuss or engage in topics unrelated to PAUT, ultrasonic testing, or NDT.\n
+                    - Your responses should be **brief, clear, and professional**.\n
+                    #### Allowed Actions:\n
+                    - Explain **ultrasonic testing principles**.\n
+                    - Guide users on **PAUT data interpretation**.\n
+                    - Assist with **NDT software commands** and provide usage instructions.\n
+                    - Answer **technical questions strictly related to PAUT and NDT**.\n
+                    Stay within these boundaries and maintain a professional and technical tone\n.
+                    """
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                { "role": "user", "content": user_input}
+            ],
+            max_tokens=100,
+            temperature=0.4
+        )
+
+        response_text = response.choices[0].message['content'].strip()
+        response_text = response_text.strip("```")
+        return response_text
+    except Exception as e:
+        print("Error communicating with OpenAI:", e)
+
+    return ""
+
+
+def contains_code(response: str) -> bool:
+    """
+    Check if the AI response contains any programming code.
+    Detects common patterns like indentation, brackets, or keywords.
+    """
+    allowed_keywords = ["PAUT", "ultrasonic", "nondestructive", "NDT", "wave", "defect", "inspection", "scanning",
+                        "probe"]
+
+    code_patterns = [
+        r"```.*?```",              # Triple backticks for code blocks
+        r"\bimport\b",             # Python imports
+        r"\bclass\b|\bdef\b",      # Python functions and classes
+        r"\bif\b|\belse\b|\bwhile\b|\bfor\b|\btry\b|\bexcept\b",  # Python keywords
+        r"#.*",                    # Comments in Python
+        r";",                      # Common in C, Java, JS
+        r"\{.*?\}",                # Brackets in C-like languages
+        r"<.*?>",                  # HTML tags
+        r"System\.out\.print",      # Java print statement
+        r"console\.log",            # JavaScript print statement
+    ]
+
+    # maybe for later, but not always good
+    # f not any(keyword.lower() in response_txt.lower() for keyword in allowed_keywords):
+    #         return False
+
+    for pattern in code_patterns:
+        if re.search(pattern, response, re.DOTALL):
+            return True
+    return False
+
+def chat_with_ollama(user_input):
+    system_prompt_old = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.\n
+                    Your primary role is to provide information related to **ultrasonic testing, nondestructive testing (NDT), and PAUT data analysis**.\n
+                    Additionally, you can send commands to the software. The list of valid commands you can use is: 
+                    {commands_description}
+                    #### Strict Rules:\n
+                    - You **MUST NOT** answer questions that are unrelated to PAUT, ultrasonic testing, or NDT.\n
+                    - If a user asks something outside of your expertise, respond with:  \n
+                    *"I am designed only for PAUT and ultrasonic testing-related tasks."*\n
+                    - You **MUST NOT** generate or provide programming code.\n
+                    - You **CANNOT** discuss or engage in topics unrelated to PAUT, ultrasonic testing, or NDT.\n
+                    - Your responses should be **brief, clear, and professional**.\n
+                    #### Allowed Actions:\n
+                    - Explain **ultrasonic testing principles**.\n
+                    - Guide users on **PAUT data interpretation**.\n
+                    - Assist with **NDT software commands** and provide usage instructions.\n
+                    - Answer **technical questions strictly related to PAUT and NDT**.\n
+                    Stay within these boundaries and maintain a professional and technical tone\n.
+                    """
+    prompt_new = f"""You are an AI assistant designed to assist with **PAUTReader software** and topics related to **Phased Array Ultrasonic Testing (PAUT), Nondestructive Testing (NDT), and ultrasonic testing**.
+            #### **Your Responsibilities:**
+            1. **Explain PAUT and NDT principles** – Provide technical details and best practices related to ultrasonic testing.
+            2. **Guide users on PAUT data interpretation** – Help users understand how to analyze PAUT data.
+            3. **Assist with PAUTReader software commands** – When asked about software commands, provide the full list:
+            {commands_description}
+            4. **Help users troubleshoot PAUTReader software issues** – Offer solutions for common problems.
+            
+            #### **Rules:**
+            - 🟢 **Allowed Topics:**
+            - PAUT/NDT concepts, techniques, and industry best practices.
+            - How to use PAUTReader software, including available commands.
+            - Common troubleshooting steps for PAUTReader software.
+            
+            - 🚫 **Restricted Topics (DO NOT Answer):**
+            - Questions **not related** to PAUT, NDT, or PAUTReader software.
+            - **Programming/code generation** (You cannot write or explain code).
+            - General knowledge topics (history, politics, entertainment, etc.).
+            - Personal opinions or discussions outside PAUT/NDT.
+            
+            #### **If the user asks about software commands:**
+            - List **only the commands from {commands_description}** and their descriptions.
+            - Do **NOT invent additional commands**.
+            
+            #### **If the question is unrelated to PAUT or NDT:**
+            - Respond with: *"I am designed only for PAUT and ultrasonic testing-related tasks."*
+            
+            Now, respond to the user input below:
+            
+            [USER]
+            {user_input}
+            
+            [ASSISTANT]
+            
+            """
+
+    response = ollama.generate(
+        model="mistral",
+        prompt=f"{prompt_new}",
+        options={"temperature": 0.5}
+    )
+    response_txt = response['response'].strip()
+
+    if contains_code(response_txt):
+        response_txt = "I am AI assistant to work with PAUTReader software based on Mistral model. "\
+                        "I am designed only for PAUT and ultrasonic testing-related tasks."
+
+    return response_txt
+
+def get_command_ollama(user_input):
+    response = ollama.generate(
+        model="mistral",
+        # prompt=f"{command_name_extraction}\n\n{user_input}",
+        prompt=f"""
+                You are an AI assistant that **ONLY extracts command names** from user input.
+            
+                ### **RULES:**
+                1. If the user's request **matches one of the following commands**, **return ONLY the command name** with **no additional text**.
+                2. If the user's input **does NOT match any command**, **return an empty string (`""`)**. **DO NOT explain. DO NOT respond with any text. DO NOT add any formatting.**
+                3. **COMMAND LIST:**
+                {commands_description}
+            
+                **USER INPUT:** "{user_input}"
+            
+                **YOUR RESPONSE (ONLY command name OR empty string):**
+                """,
+        options={"temperature": 0}
+    )
+
+    # prompt = f"""[SYSTEM]\n{command_name_extraction} \n\n[USER]\n{user_input}\n[ASSISTANT]""",  # Ensures Mistral responds like a chatbot
+
+    '''
+        You are an AI assistant that **ONLY extracts command names** from user input.
+        ### **RULES:**
+        1. If the user's request **matches one of the following commands**, **return ONLY the command name** with **no additional text**.
+        2. If the user's input **does NOT match any command**, **return an empty string (`""`)**. **DO NOT explain. DO NOT respond with any text. DO NOT add any formatting.**
+        3. **COMMAND LIST:**
+        {commands_description}
+        **USER INPUT:** "{user_input}"
+        **YOUR RESPONSE (ONLY command name OR empty string):**
+        """
+    '''
+    print(response)
+    return response['response'].strip()
 
 def status_message(command, args):
     if command == "loadData":
@@ -80,20 +281,12 @@ def extract_keywords(text):
     doc = nlp(text.lower())
     return [token.lemma_ for token in doc if token.pos_ in ["NOUN", "VERB"] and token.has_vector]
 
-def get_command_ollama(user_input):
-    response = ollama.generate(
-        model="mistral",
-        prompt=f"{command_name_extraction}\n\n{user_input}",
-        options={"temperature": 0}
-    )
-    print(response)
-    return response['response'].strip()
+
 
 def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95):
     # TODO: maybe remake this function to return cosine similarity for each command and choose the one with largest value?
 
     matched_commands = []
-
     for command, keywords in command_keywords.items():
         command_vectors = [nlp(keyword).vector for keyword in keywords if nlp(keyword).has_vector]
 
@@ -109,8 +302,8 @@ def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95)
                 matched_commands.append((command, avg_similarity))
 
     matched_commands = sorted(set(matched_commands), key=lambda x: x[1], reverse=True)
-
     return [cmd[0] for cmd in matched_commands]
+
 
 def extract_arguments(command, user_input):
     args = []
@@ -154,8 +347,6 @@ def extract_arguments(command, user_input):
             warning_txt = "No valid folder name found to update directory."
 
     return args, warning_txt
-
-
 
 def process_input_legacy(user_input):
     """extract commands, arguments, and add to queue"""
