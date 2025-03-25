@@ -14,40 +14,53 @@ from ai_functions_keeper import *
 # TODO: use LLM_1 requests for search for correct command based on command_name and its description from user input
 # TODO: if find matched command, then use LLM2 to extract arguments from user input required for this command
 
-
 command_queue = Queue()
 def process_input(user_input):
     progress_txt = []
     try:
-        user_keywords = extract_keywords(user_input)
-        matched_commands = get_best_matching_commands(user_keywords)
-        if matched_commands:
-            command_idx = 0
-            # place only one command into queue - sometimes errors appear to run same commands infinite times
-            while (command_idx < len(matched_commands) and command_queue.empty()):
-                command = matched_commands[command_idx]
-                args, warning_txt = extract_arguments(command, user_input)
-                command_queue.put((command, args))
-                command_idx += 1
-                progress_txt = status_message(command, args)
-                if warning_txt:
-                    progress_txt += f"\n{warning_txt}"
+        do_kw_extract = False
+        if do_kw_extract:
+            user_keywords = extract_keywords(user_input)
+            matched_commands = get_best_matching_commands(user_keywords)
+            if matched_commands:
+                command_idx = 0
+                # place only one command into queue - sometimes errors appear to run same commands infinite times
+                while (command_idx < len(matched_commands) and command_queue.empty()):
+                    command = matched_commands[command_idx]
+                    args, warning_txt = extract_arguments(command, user_input)
+                    command_queue.put((command, args))
+                    command_idx += 1
+                    progress_txt = status_message(command, args)
+                    if warning_txt:
+                        progress_txt += f"\n{warning_txt}"
 
-                if not command_queue.empty():
-                    break
-
-
-            '''for command in matched_commands:
-                args, warning_txt = extract_arguments(command, user_input)
-                command_queue.put((command, args))
-
-                progress_txt = status_message(command, args)
-                if warning_txt:
-                    progress_txt += f"\n{warning_txt}"'''
-
-
+                    if not command_queue.empty():
+                        break
+                '''for command in matched_commands:
+                    args, warning_txt = extract_arguments(command, user_input)
+                    command_queue.put((command, args))
+    
+                    progress_txt = status_message(command, args)
+                    if warning_txt:
+                        progress_txt += f"\n{warning_txt}"'''
+            else:
+                progress_txt = "No matching commands found."
         else:
-            progress_txt = "No matching commands found."
+            command = get_command_ollama(user_input)
+            if command is not None:
+                command = command.strip()
+                print(f"Command received from ollama is {command}")
+                if command in command_names_list:
+                    args, warning_txt = extract_arguments(command, user_input)
+                    command_queue.put((command, args))
+                    progress_txt = status_message(command, args)
+                    if warning_txt:
+                        progress_txt += f"\n{warning_txt}"
+                else:
+                    progress_txt = "I'm working on implementing interaction with assistant outside of the command processing"
+
+            else:
+                progress_txt = "Sorry, I didn't understand you"
     except Exception as e:
         progress_txt = f"Error processing input: {e}"
 
@@ -221,6 +234,9 @@ class ChatWindow(QtWidgets.QMainWindow):
 
     def process_user_input(self, user_text):
         progress_txt = process_input(user_text)
+        if not isinstance(progress_txt, str):
+            progress_txt = str(progress_txt)
+
         QtCore.QMetaObject.invokeMethod(
             self, "display_assistant_message",
             QtCore.Qt.ConnectionType.QueuedConnection,

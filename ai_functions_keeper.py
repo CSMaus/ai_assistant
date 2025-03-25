@@ -13,6 +13,7 @@ import re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import ollama
+from prompts import command_name_extraction
 
 
 # now we will use only english. Other languages will be added later
@@ -33,10 +34,14 @@ command_keywords = {
     "setNewDirectory": ["change folder", "move", "new directory", "set path", "update folder", "change directory", "update directory"]
 }
 
+command_names_list = ["loadData", "updatePlot", "getFileInformation", "getDirectory",
+                "doAnalysisSNR", "startDefectDetection", "setNewDirectory"]
+
+
 def status_message(command, args):
     if command == "loadData":
         return f"Trying to load datafile: {args}"  # [0][2:-2]
-    current_command = f"command: {command}, args: {args}"
+    '''current_command = f"command: {command}, args: {args}"
     system_prompt = ("Convert input command with arguments into natural language text so it could be used as answer "
                      "about the current running process in program. No additional text. No additional questions. "
                      "Only process following command with args as described: ")
@@ -46,11 +51,12 @@ def status_message(command, args):
         options={"temperature": 0}
     )
     print(response)
-    return response['response'].strip()
+    return response['response'].strip()'''
+    return f"Command: {command}.\nReceiving status about command execution will be implemented later."
 
 
 def extract_folder_ollama(user_input):
-    system_prompt = "Extract only the folder name from the input. Return only the folder name. No extra words. No explanations. No formatting."
+    system_prompt = "Extract full folder path with folder name from the input. Return only the folder path. No extra words. No explanations. No formatting."
     response = ollama.generate(
         model="mistral",
         prompt=f"{system_prompt}\n\n{user_input}",
@@ -73,6 +79,15 @@ def extract_filename_ollama(user_input):
 def extract_keywords(text):
     doc = nlp(text.lower())
     return [token.lemma_ for token in doc if token.pos_ in ["NOUN", "VERB"] and token.has_vector]
+
+def get_command_ollama(user_input):
+    response = ollama.generate(
+        model="mistral",
+        prompt=f"{command_name_extraction}\n\n{user_input}",
+        options={"temperature": 0}
+    )
+    print(response)
+    return response['response'].strip()
 
 def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95):
     # TODO: maybe remake this function to return cosine similarity for each command and choose the one with largest value?
