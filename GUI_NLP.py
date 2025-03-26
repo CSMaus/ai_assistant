@@ -53,8 +53,8 @@ def process_input(user_input):
                 print(f"Command received from ollama is {command}")
                 if command in command_names_list:
                     args, warning_txt = extract_arguments(command, user_input)
-                    command_queue.put((command, args))
                     progress_txt = status_message(command, args)
+                    command_queue.put((command, args))
                     if warning_txt:
                         progress_txt += f"\n{warning_txt}"
                 elif command == ", ".join(command_names_list):

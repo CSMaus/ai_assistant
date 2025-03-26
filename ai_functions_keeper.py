@@ -241,19 +241,20 @@ def get_command_ollama(user_input):
 
 def status_message(command, args):
     if command == "loadData":
-        return f"Trying to load datafile: {args}"  # [0][2:-2]
-    '''current_command = f"command: {command}, args: {args}"
-    system_prompt = ("Convert input command with arguments into natural language text so it could be used as answer "
-                     "about the current running process in program. No additional text. No additional questions. "
-                     "Only process following command with args as described: ")
-    response = ollama.generate(
-        model="mistral",
-        prompt=f"{system_prompt}\n\n{current_command}",
-        options={"temperature": 0}
-    )
-    print(response)
-    return response['response'].strip()'''
-    return f"Command: {command}.\nReceiving status about command execution will be implemented later."
+        try:
+            data_f = re.sub(r'[\[\]"\']', '', str(", ".join(args)))
+            return f"Trying to load datafile: {data_f}"
+        except Exception as e:
+            print("Tried to extract file name, got exception: ", e)
+
+    elif command == "setNewDirectory":
+        try:
+            dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
+            return f"Trying to change current directory to: {dir}"
+        except Exception as e:
+            print("Tried to extract file name, got exception: ", e)
+    return f"Thinking..."
+    # Command: {command}.\nReceiving status about command execution will be implemented later."
 
 
 def extract_folder_ollama(user_input):
