@@ -21,6 +21,14 @@ command_name_extraction = f'Here is list of commands ith their descriptions:\n {
                           'No words. No explanations. No formatting. No extension. No symbols.'
                           # 'If you cannot find command that match the user request or there is no request in user input '\
                           # 'return empty row. No extra words. No explanations. No formatting.'
+commands_names_extraction = f'Here is list of commands ith their descriptions:\n {commands_description}\n\n'\
+                          'If user ask you to do something which described in command description '\
+                          'and it can be done buy any of this command or combination of commands return exact command name or commands list separated by comma with nothing else! \n'\
+                          'But if user input just want to talk, or greet you, or ask you to do something else '\
+                          'and non of commands description do NOT math the user input, return only empty row. ' \
+                          'No words. No explanations. No formatting. No extension. No symbols.'
+                          # 'If you cannot find command that match the user request or there is no request in user input '\
+                          # 'return empty row. No extra words. No explanations. No formatting.'
 
 #  Find only one command that match the user input the most and return only exact command from the list!
 

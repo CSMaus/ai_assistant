@@ -13,7 +13,7 @@ import re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import ollama
-from prompts import command_name_extraction, commands_description
+from prompts import command_name_extraction, commands_description, commands_names_extraction
 
 
 # now we will use only english. Other languages will be added later
@@ -46,13 +46,20 @@ openai.api_key = ""
 with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
     openai.api_key = file.read().strip()
 
+
+def parse_comma_separated(command):
+    command = command.strip()
+    if re.fullmatch(r'\s*[a-zA-Z]+(?:\s*,\s*[a-zA-Z]+)*\s*', command):
+        return [word.strip() for word in command.split(',')]
+    return None
+
 def get_command_gpt(user_input):
     try:
         # TODO: it's NOT competition! Need to fix it
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": command_name_extraction},
+                {"role": "system", "content": commands_names_extraction},# command_name_extraction},
                 {"role": "user", "content": user_input }
             ],
             max_tokens=100,

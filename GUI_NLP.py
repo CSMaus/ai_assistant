@@ -46,23 +46,27 @@ def process_input(user_input):
             else:
                 progress_txt = "No matching commands found."
         else:
-            command = get_command_ollama(user_input)
-            # command = get_command_gpt(user_input)
-            if command is not None:
-                command = command.strip()
-                print(f"Command received from ollama is {command}")
-                if command in command_names_list:
-                    args, warning_txt = extract_arguments(command, user_input)
-                    progress_txt = status_message(command, args)
-                    command_queue.put((command, args))
-                    if warning_txt:
-                        progress_txt += f"\n{warning_txt}"
-                elif command == ", ".join(command_names_list):
-                    progress_txt = command
-                else:
-                    # progress_txt = chat_with_gpt(user_input)
-                    progress_txt = chat_with_ollama(user_input)
-                    # progress_txt = "I'm working on implementing interaction with assistant outside of the command processing"
+            # command = get_command_ollama(user_input)
+            commands = get_command_gpt(user_input)
+
+            if commands is not None:
+                # command = command.strip()
+                commands = parse_comma_separated(commands)
+                print("Commands list is: ", commands)
+                for command in commands:
+                    print(f"Command received from AI is {command}")
+                    if command in command_names_list:
+                        args, warning_txt = extract_arguments(command, user_input)
+                        progress_txt = status_message(command, args)
+                        command_queue.put((command, args))
+                        if warning_txt:
+                            progress_txt += f"\n{warning_txt}"
+                    elif command == ", ".join(command_names_list):
+                        progress_txt = command
+                    # else:
+                        # progress_txt = chat_with_gpt(user_input)
+                        # progress_txt = chat_with_ollama(user_input)
+                        # progress_txt = "I'm working on implementing interaction with assistant outside of the command processing"
 
             else:
                 progress_txt = "Sorry, I didn't understand you"
@@ -184,7 +188,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         # self.listener_thread = self.listener_thread.start() # this is bug
         self.listener_thread.start()
 
-    def command_listener(self):
+    def command_listener_old(self):
         while self.listener_active:
             command, args = command_queue.get()
             msg, response = execute_command_gui(command, *args)
@@ -194,6 +198,29 @@ class ChatWindow(QtWidgets.QMainWindow):
                 QtCore.Q_ARG(str, response)
             )
             command_queue.task_done()
+
+    # display messages in real time about commands execution status
+    def command_listener(self):
+        while self.listener_active:
+            command, args = command_queue.get()
+
+            QtCore.QMetaObject.invokeMethod(
+                self, "display_assistant_message",
+                QtCore.Qt.ConnectionType.QueuedConnection,
+                QtCore.Q_ARG(str, f"{status_message(command, args)}...")
+            )
+
+            def execute_and_display():
+                msg, response = execute_command_gui(command, *args)
+                QtCore.QMetaObject.invokeMethod(
+                    self, "display_assistant_message",
+                    QtCore.Qt.ConnectionType.QueuedConnection,
+                    QtCore.Q_ARG(str, response)
+                )
+                command_queue.task_done()
+
+            execution_thread = Thread(target=execute_and_display, daemon=True)
+            execution_thread.start()
 
     # to handle threads and GUI safely
     @QtCore.pyqtSlot(str)
