@@ -253,7 +253,7 @@ def status_message(command, args):
             return f"Trying to change current directory to: {dir}"
         except Exception as e:
             print("Tried to extract file name, got exception: ", e)
-    return f"Thinking..."
+    return f"Working on it..."
     # Command: {command}.\nReceiving status about command execution will be implemented later."
 
 
