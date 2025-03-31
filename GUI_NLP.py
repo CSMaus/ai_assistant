@@ -167,17 +167,17 @@ class ChatWindow(QtWidgets.QMainWindow):
         input_layout = QtWidgets.QHBoxLayout()
         self.inputField = QtWidgets.QLineEdit(self)
         self.sendButton = QtWidgets.QPushButton("Send", self)
-        self.inputField.setStyleSheet("color: #FFFFFF;")
-        self.sendButton.setStyleSheet("color: #FFFFFF;")
+        self.inputField.setStyleSheet("color: #111518;") # FFFFFF
+        self.sendButton.setStyleSheet("color: #111518;")
         input_layout.addWidget(self.inputField)
         input_layout.addWidget(self.sendButton)
         main_layout.addLayout(input_layout)
 
 
-        self.user_color = QtGui.QColor("#323232")  #3C3C3C")  # #272727
-        self.assist_color = QtGui.QColor("#242424")
-        self.textColor = QtGui.QColor("#FFFFFF")
-        self.backgroundColor = QtGui.QColor("#202020")  #  #202020
+        self.user_color = QtGui.QColor("#91BDF8") # 323232  //// #3C3C3C")  # #272727
+        self.assist_color = QtGui.QColor("#B4D4FF")  # 242424
+        self.textColor = QtGui.QColor("#111518")  # FFFFFFtext
+        self.backgroundColor = QtGui.QColor("#D9E9FF")  #  #202020
 
         self.sendButton.clicked.connect(self.send_message)
         self.inputField.returnPressed.connect(self.send_message)
@@ -223,14 +223,23 @@ class ChatWindow(QtWidgets.QMainWindow):
             execution_thread.start()
 
     # to handle threads and GUI safely
-    @QtCore.pyqtSlot(str)
+    '''@QtCore.pyqtSlot(str)
     def display_assistant_message(self, response):
         assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
         assistant_bubble.setHtml(f'<span style="color:{self.textColor.name()}">{response}</span>')
         assistant_bubble.update_size()
         self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
+        QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)'''
+
+    @QtCore.pyqtSlot(str)
+    def display_user_message(self, message):
+        user_bubble = TextEdit(alignment='right', bubble_color=self.user_color.name())
+        user_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>You:</b><br>{message}</span>')
+        user_bubble.update_size()
+        self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
         QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
 
+        
     def auto_scroll_down(self):
         scroll_bar = self.scroll_area.verticalScrollBar()
         scroll_bar.setValue(scroll_bar.maximum())
@@ -238,13 +247,13 @@ class ChatWindow(QtWidgets.QMainWindow):
     def send_message(self):
         user_text = self.inputField.text().strip()
 
-        if user_text.lower() in ["quit", "exit", "bye"]:
+        if user_text.lower() in ["/quit", "/exit", "/bye"]:
             self.listener_active = False
             self.close()
             sys.exit()
 
         if user_text:
-            user_bubble = TextEdit(alignment='left', bubble_color=self.user_color.name())
+            user_bubble = TextEdit(alignment='right', bubble_color=self.user_color.name())
             user_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>You:</b><br>{user_text}</span>')
             user_bubble.update_size()
             self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
@@ -294,7 +303,7 @@ class ChatWindow(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     command_queue = Queue()
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet("QWidget { background-color: #202020; }")
+    app.setStyleSheet("QWidget { background-color: #D9E9FF; }")
     window = ChatWindow()
     window.show()
     sys.exit(app.exec())
