@@ -13,6 +13,8 @@ import re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import ollama
+import io
+import wave
 from prompts import command_name_extraction, commands_description, commands_names_extraction
 
 
@@ -397,6 +399,30 @@ def command_listener_legacy():
         command, args = command_queue.get()
         msg, response = execute_command_gui(command, *args)
         command_queue.task_done()
+
+def extract_text(audio_bytes):
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wf:
+        wf.setnchannels(1)  # mono - one channel
+        wf.setsampwidth(2)  # 16-bit (pyaudio.paInt16 = 2 bytes)
+        wf.setframerate(16000)  # Hz sample rate
+        wf.writeframes(audio_bytes)
+    wav_buffer.seek(0)
+    wav_buffer.name = "temp.wav"
+
+    transcript = openai.Audio.transcribe(
+        model="whisper-1",
+        file=wav_buffer,
+        language="en"  # TODO: add ability to choose the language
+    )
+    if transcript:
+        extracted_text = transcript.get("text", "")
+        return extracted_text
+    else:
+        return ""
+
+
+
 
 def run_chat_bot():
     print("Type your command ('quit' to exit):")

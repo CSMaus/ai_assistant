@@ -4,6 +4,10 @@ from PyQt6.QtCore import Qt
 from queue import Queue
 from threading import Thread
 from ai_functions_keeper import *
+import pyaudio
+import wave
+import time
+
 
 # TODO: fix commands query: now it set commands infinitely
 # TODO: modify messages in c# to be more user friendly
@@ -182,10 +186,29 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.inputField.installEventFilter(self)  # to intercept key presses
 
 
-        self.sendButton = QtWidgets.QPushButton("Send", self)
+        # self.sendButton = QtWidgets.QPushButton("Send", self)
+        self.sendButton = QtWidgets.QPushButton(self)
+        self.sendButton.setIcon(QtGui.QIcon("icons/send.png"))
+        self.sendButton.setIconSize(QtCore.QSize(24, 24))
+
+        # microphone
+        self.micButton = QtWidgets.QPushButton(self)
+        self.micButton.setIcon(QtGui.QIcon("icons/mic.png"))
+        self.micButton.setIconSize(QtCore.QSize(24, 24))
+        self.micButton.setCheckable(True)
+        self.micButton.setToolTip("Hold to record voice")
+        self.micButton.clicked.connect(self.handle_microphone_input)
+
+        self.recording = False
+        self.audio_stream = None
+        self.audio_frames = []
+        self.audio_interface = pyaudio.PyAudio()
+
+        # TODO: style all the squared to the rounded edges
         self.sendButton.setStyleSheet("color: #111518;")
         input_layout.addWidget(self.inputField)
         input_layout.addWidget(self.sendButton)
+        input_layout.addWidget(self.micButton)
         main_layout.addLayout(input_layout)
 
 
@@ -204,18 +227,81 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.listener_thread.start()
 
     def eventFilter(self, source, event):
-        if source == self.inputField and event.type() == QtCore.QEvent.Type.KeyPress:
-            if event.key() == Qt.Key.Key_Return:
-                if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
-                    # newline with Shift+Enter
-                    cursor = self.inputField.textCursor()
-                    cursor.insertText('\n')
-                    return True
-                else:
-                    # clear Enter -> send message
-                    self.send_message()
+        if source == self.inputField:
+            if event.type() == QtCore.QEvent.Type.KeyPress:
+                if event.key() == Qt.Key.Key_Return:
+                    if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+                        cursor = self.inputField.textCursor()
+                        cursor.insertText('\n')
+                        return True
+                    else:
+                        self.send_message()
+                        return True
+
+                elif event.key() == Qt.Key.Key_V and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                    clipboard = QtWidgets.QApplication.clipboard()
+                    self.inputField.insertPlainText(clipboard.text())
                     return True
         return super().eventFilter(source, event)
+
+    def handle_microphone_input(self):
+        if self.micButton.isChecked():
+            self.micButton.setToolTip("Recording... Click again to stop.")
+            self.recording = True
+            self.audio_frames = []
+
+            def record_audio():
+                CHUNK = 1024
+                FORMAT = pyaudio.paInt16
+                CHANNELS = 1
+                RATE = 16000
+
+                stream = self.audio_interface.open(format=FORMAT,
+                                                   channels=CHANNELS,
+                                                   rate=RATE,
+                                                   input=True,
+                                                   frames_per_buffer=CHUNK)
+
+                self.audio_stream = stream
+                print("Recording started...")
+
+                while self.recording:
+                    data = stream.read(CHUNK)
+                    self.audio_frames.append(data)
+
+                stream.stop_stream()
+                stream.close()
+                print("Recording stopped.")
+
+                # frames into raw audio bytes
+                audio_data = b''.join(self.audio_frames)
+
+                try:
+                    # TODO: fill logic in extract_text placeholder
+                    transcribed_text = extract_text(audio_data)
+                    text = "Test sending message text"
+                    print(f"Transcribed text is: {transcribed_text}")
+                    QtCore.QMetaObject.invokeMethod(
+                        self,
+                        "handle_transcribed_text",
+                        QtCore.Qt.ConnectionType.QueuedConnection,
+                        QtCore.Q_ARG(str, text)
+                    )
+
+                except Exception as e:
+                    print(f"Error transcribing audio: {e}")
+                    self.inputField.setPlainText("[Error processing voice input]")
+
+            Thread(target=record_audio, daemon=True).start()
+
+        else:
+            self.recording = False
+            self.micButton.setToolTip("Hold to record voice")
+
+    @QtCore.pyqtSlot(str)
+    def handle_transcribed_text(self, text):
+        self.inputField.setPlainText(text)
+        self.send_message()
 
     def command_listener_old(self):
         while self.listener_active:
