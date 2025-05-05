@@ -5,14 +5,19 @@
 #   O : search for the arguments if required and put in the queue
 #   X : answer to the user using description from "who you are"
 
-commands_description = '"loadData" is command which is used to read or open or load data file which user want to work with;\n'\
-            '"updatePlot" command is used to refresh or update any plot or scan;\n'\
-            '"getFileInformation" command opens File Information window and to display information about opened file;\n'\
-            '"getDirectory" command gives information in which folder or directory on computer we are working now usually where opened current data file; \n'\
-            '"doAnalysisSNR" command opens new window to do SNR analysis, where SNR means signal to noise ratio analysis; \n'\
-            '"startDefectDetection" command runs AI neural network to make search for flaws or any other defects in data file '\
-            'and displays them in C-scan plot image; \n'\
-            '"setNewDirectory" command changes the folder or directory where we are working now'
+commands_description = """
+                        "loadData" is command which is used to read or open or load data file which user want to work with;\n
+                        "updatePlot" command is used to refresh or update any plot or scan;\n
+                        "getFileInformation" command opens File Information window and to display information about opened file;\n
+                        "getDirectory" command gives information in which folder or directory on computer we are working now 
+                        usually where opened current data file; \n
+                        "doAnalysisSNR" command opens new window to do SNR analysis, where SNR means signal to noise ratio analysis; \n
+                        "startDefectDetection" command runs AI neural network to make search for flaws or any other defects in data file 
+                        and displays them in C-scan plot image; \n
+                        "setNewDirectory" command changes the folder or directory where we are working now \n
+                        "makeReportOnly" makes report for the current file based on its analysis \n
+                        "doFolderAnalysis" does analysis of all files in folder and prepare common report
+                        """
 
 command_name_extraction = f'Here is list of commands ith their descriptions:\n {commands_description}\n\n'\
                           'If user ask you to do something which described in command description and it can be done buy any of this command return exact command name with nothing else! \n'\

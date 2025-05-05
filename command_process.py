@@ -54,6 +54,16 @@ COMMAND_ENDPOINTS = {
         "method": "POST",
         "payload": lambda: {},
     },
+    "makeReportOnly": {
+        "endpoint": f"{BASE_URL}/makeReportOnly",
+        "method": "POST",
+        "payload": lambda: {},
+    },
+    "doFolderAnalysis": {
+        "endpoint": f"{BASE_URL}/doFolderAnalysis",
+        "method": "POST",
+        "payload": lambda: {},
+    },
 }
 # "payload": lambda: {},  # get methods should not contain it
 '''"setNewDirectory": {

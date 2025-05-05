@@ -35,7 +35,8 @@ command_keywords = {
 }
 
 command_names_list = ["loadData", "updatePlot", "getFileInformation", "getDirectory",
-                "doAnalysisSNR", "startDefectDetection", "setNewDirectory"]
+                "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeReportOnly",
+                      "doFolderAnalysis"]
 
 
 
