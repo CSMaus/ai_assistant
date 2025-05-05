@@ -14,9 +14,11 @@ from ai_functions_keeper import *
 # TODO: use LLM_1 requests for search for correct command based on command_name and its description from user input
 # TODO: if find matched command, then use LLM2 to extract arguments from user input required for this command
 
+
 command_queue = Queue()
+# TODO: fix sending empty messages or msgs repeats
 def process_input(user_input):
-    progress_txt = []
+    progress_txt = ""
     try:
         do_kw_extract = False
         if do_kw_extract:
@@ -204,11 +206,11 @@ class ChatWindow(QtWidgets.QMainWindow):
         while self.listener_active:
             command, args = command_queue.get()
 
-            QtCore.QMetaObject.invokeMethod(
+            """QtCore.QMetaObject.invokeMethod(
                 self, "display_assistant_message",
                 QtCore.Qt.ConnectionType.QueuedConnection,
                 QtCore.Q_ARG(str, f"{status_message(command, args)}...")
-            )
+            )"""
 
             def execute_and_display():
                 msg, response = execute_command_gui(command, *args)

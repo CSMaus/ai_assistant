@@ -35,7 +35,7 @@ command_keywords = {
 }
 
 command_names_list = ["loadData", "updatePlot", "getFileInformation", "getDirectory",
-                "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeReportOnly",
+                "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                       "doFolderAnalysis"]
 
 
@@ -261,6 +261,12 @@ def status_message(command, args):
             return f"Trying to change current directory to: {dir}"
         except Exception as e:
             print("Tried to extract file name, got exception: ", e)
+    elif command == "doFolderAnalysis":
+        try:
+            dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
+            return f"Working on analysis of all files in: {dir}"
+        except Exception as e:
+            print("Tried to extract file name, got exception: ", e)
     return f"Working on it..."
     # Command: {command}.\nReceiving status about command execution will be implemented later."
 
@@ -354,8 +360,15 @@ def extract_arguments(command, user_input):
             args.extend([folder_name, False, ""])
         else:
             warning_txt = "No valid folder name found to update directory."
-
+    elif command == "doFolderAnalysis":
+        # TODO: add extraction of files extension. I e maybe analyse only fpd or only opd files
+        folder_name = extract_folder_ollama(user_input).strip()
+        if folder_name:
+            args.extend([folder_name])
+        else:
+            warning_txt = "No valid folder name found to make analysis. \n Working with current directory"
     return args, warning_txt
+
 
 def process_input_legacy(user_input):
     """extract commands, arguments, and add to queue"""

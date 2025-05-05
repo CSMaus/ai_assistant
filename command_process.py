@@ -54,15 +54,15 @@ COMMAND_ENDPOINTS = {
         "method": "POST",
         "payload": lambda: {},
     },
-    "makeReportOnly": {
-        "endpoint": f"{BASE_URL}/makeReportOnly",
+    "makeSingleFileOnly": {
+        "endpoint": f"{BASE_URL}/makeSingleFileOnly",
         "method": "POST",
         "payload": lambda: {},
     },
     "doFolderAnalysis": {
         "endpoint": f"{BASE_URL}/doFolderAnalysis",
         "method": "POST",
-        "payload": lambda: {},
+        "payload": lambda folder_path: {"Folder": folder_path},
     },
 }
 # "payload": lambda: {},  # get methods should not contain it
@@ -124,7 +124,10 @@ def execute_command_gui(command_name, *args):
             print(f"Failed to execute command '{command_name}'. Status code:", response.status_code)
             print("Response:", response.text)
             fail_success_msg = f"Failed to execute command '{command_name}'. Status code: {response.status_code}"
-            response_msg = response.text
+            response_msg = f"Failed to execute instruction.\n"  # response.text
+            if response.status_code == 403:
+                status_msg = "Access to the requested resource is forbidden."
+                response_msg += status_msg
     else:
         print(f"Unknown command '{command_name}'")
         fail_success_msg = f"Unknown command '{command_name}'"

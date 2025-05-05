@@ -15,8 +15,8 @@ commands_description = """
                         "startDefectDetection" command runs AI neural network to make search for flaws or any other defects in data file 
                         and displays them in C-scan plot image; \n
                         "setNewDirectory" command changes the folder or directory where we are working now \n
-                        "makeReportOnly" makes report for the current file based on its analysis \n
-                        "doFolderAnalysis" does analysis of all files in folder and prepare common report
+                        "makeSingleFileOnly" makes report only for ONE SINGLE currently opened file based on its analysis \n
+                        "doFolderAnalysis" does analysis of all files in folder and prepares report for them
                         """
 
 command_name_extraction = f'Here is list of commands ith their descriptions:\n {commands_description}\n\n'\
