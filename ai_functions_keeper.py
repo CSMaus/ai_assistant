@@ -410,6 +410,8 @@ def extract_text(audio_bytes):
     wav_buffer.seek(0)
     wav_buffer.name = "temp.wav"
 
+    # TODO: take a look at https://github.com/vndee/local-talking-llm
+    # ai assistant and speech2text using langchain
     transcript = openai.Audio.transcribe(
         model="whisper-1",
         file=wav_buffer,
