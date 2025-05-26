@@ -180,7 +180,7 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         palette = self.inputField.palette()
         palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#111518"))
-        palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#D9E9FF"))  # background
+        palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#F5FAFF"))  # background  F5FAFF
         self.inputField.setPalette(palette)
 
         self.inputField.installEventFilter(self)  # to intercept key presses
@@ -215,7 +215,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.user_color = QtGui.QColor("#91BDF8") # 323232  //// #3C3C3C")  # #272727
         self.assist_color = QtGui.QColor("#B4D4FF")  # 242424
         self.textColor = QtGui.QColor("#111518")  # FFFFFFtext
-        self.backgroundColor = QtGui.QColor("#D9E9FF")  #  #202020
+        self.backgroundColor = QtGui.QColor("#F5FAFF")  #  #202020
 
         self.sendButton.clicked.connect(self.send_message)
         # self.inputField.returnPressed.connect(self.send_message)
@@ -225,6 +225,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.listener_active = True
         # self.listener_thread = self.listener_thread.start() # this is bug
         self.listener_thread.start()
+        QtCore.QTimer.singleShot(0, lambda: self.display_assistant_message("Hello! How can I assist you?"))
 
     def eventFilter(self, source, event):
         if source == self.inputField:
@@ -334,8 +335,13 @@ class ChatWindow(QtWidgets.QMainWindow):
                 )
                 command_queue.task_done()
 
-            execution_thread = Thread(target=execute_and_display, daemon=True)
+            # execution_thread = Thread(target=execute_and_display, daemon=True)
+            execution_thread = Thread(
+                target=execute_and_display,
+                daemon=True
+            )
             execution_thread.start()
+            execution_thread.join()
 
     @QtCore.pyqtSlot(str)
     def display_user_message(self, message):
@@ -354,6 +360,23 @@ class ChatWindow(QtWidgets.QMainWindow):
     def send_message(self):
         # user_text = self.inputField.text().strip()
         user_text = self.inputField.toPlainText().strip() # text with new lines by using shift+Enter
+
+        if user_text in ["Who are you?", "What can you do?"]:
+            user_bubble = TextEdit(alignment='right', bubble_color=self.user_color.name())
+            user_text = user_text.replace('\n', '<br>')
+            user_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>You:</b><br>{user_text}</span>')
+            user_bubble.update_size()
+            self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
+
+            self.inputField.clear()
+            self.chat_container.adjustSize()
+            QtCore.QTimer.singleShot(0, self.auto_scroll)
+
+            answer = ("I’m an AI assistant bot designed to help analyze PAUT data and control the application to open, view, and analyze those datasets.")
+            self.display_assistant_message(answer)
+            self.inputField.clear()
+            return
+
         if user_text.lower() in ["/quit", "/exit", "/bye"]:
             self.listener_active = False
             self.close()
@@ -412,7 +435,7 @@ class ChatWindow(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     command_queue = Queue()
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet("QWidget { background-color: #D9E9FF; }")
+    app.setStyleSheet("QWidget { background-color: #F5FAFF; }")
     window = ChatWindow()
     window.show()
     sys.exit(app.exec())
