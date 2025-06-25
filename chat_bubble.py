@@ -46,7 +46,17 @@ class ChatBubble(QtWidgets.QWidget):
         
         # Create the text label - use QLabel instead of QTextEdit to avoid cursor issues
         self.text_label = QtWidgets.QLabel(self.message)
-        self.text_label.setWordWrap(True)
+        
+        # Calculate appropriate width based on text content
+        fm = QtGui.QFontMetrics(self.text_label.font())
+        text_width = fm.horizontalAdvance(self.message.replace('<br>', ' '))
+        
+        # Set word wrap only if the text is longer than the maximum width
+        if text_width > 400:
+            self.text_label.setWordWrap(True)
+        else:
+            self.text_label.setWordWrap(False)
+            
         self.text_label.setTextFormat(Qt.TextFormat.RichText)
         self.text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
@@ -80,9 +90,9 @@ class ChatBubble(QtWidgets.QWidget):
                 }}
             """)
         
-        # Set size policy
+        # Set size policy to adjust based on content
         self.bubble.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Preferred
         )
         
