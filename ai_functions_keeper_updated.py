@@ -20,11 +20,11 @@ from prompts import command_name_extraction, commands_description, commands_name
 # Import the file finder module
 try:
     from file_finder import find_file_in_system, find_directory_in_system, find_files_by_extension, get_most_recent_file
+
     FILE_FINDER_AVAILABLE = True
 except ImportError:
     print("Warning: file_finder module not available. File search functionality will be limited.")
     FILE_FINDER_AVAILABLE = False
-
 
 # now we will use only english. Other languages will be added later
 nlp = spacy.load("en_core_web_md")
@@ -35,20 +35,20 @@ opened_file_name = ""
 command_queue = Queue()
 
 command_keywords = {
-    "loadData": ["load", "open", "load file", "open file", "file", "load data", "open data", "open datafile", "load datafile", "datafile", "open"],
+    "loadData": ["load", "open", "load file", "open file", "file", "load data", "open data", "open datafile",
+                 "load datafile", "datafile", "open"],
     "updatePlot": ["refresh", "update", "redraw", "plot", "modify plot"],
     "getFileInformation": ["info", "details", "metadata", "information"],
     "getDirectory": ["current folder", "current path", "current location", "current directory", "current folder"],
     "doAnalysisSNR": ["snr", "analyze", "signal analysis", "noise ratio", "analyze data", "do analysis", "analysis"],
     "startDefectDetection": ["defect", "detect", "flaw", "detect defects", "search defects", "find defects"],
-    "setNewDirectory": ["change folder", "move", "new directory", "set path", "update folder", "change directory", "update directory"]
+    "setNewDirectory": ["change folder", "move", "new directory", "set path", "update folder", "change directory",
+                        "update directory"]
 }
 
 command_names_list = ["loadData", "updatePlot", "getFileInformation", "getDirectory",
-                "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
+                      "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                       "doFolderAnalysis"]
-
-
 
 ############################   CHAT GPT API   #################
 import openai
@@ -61,8 +61,15 @@ client = None
 try:
     with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
         api_key = file.read().strip()
-        client = OpenAI(api_key=api_key)
-            
+
+        # Check the operating system to handle platform-specific initialization
+        if platform.system() == "Windows":
+            # On Windows, don't use the proxies parameter
+            client = OpenAI(api_key=api_key)
+        else:
+            # On macOS and other systems, use the standard initialization
+            client = OpenAI(api_key=api_key)
+
         print(f"OpenAI client initialized successfully on {platform.system()}")
 except Exception as e:
     print(f"Error initializing OpenAI client: {e}")
@@ -74,12 +81,13 @@ def parse_comma_separated(command):
         return [word.strip() for word in command.split(',')]
     return None
 
+
 def get_command_gpt(user_input):
     try:
         if client is None:
             print("OpenAI client not initialized")
             return None
-        
+
         # Check for file operations first - these should take priority
         file_operation_patterns = [
             (r"open.*file", "loadData"),
@@ -91,31 +99,31 @@ def get_command_gpt(user_input):
             (r"\.fpd", "loadData"),
             (r"\.opd", "loadData")
         ]
-        
+
         for pattern, command in file_operation_patterns:
             if re.search(pattern, user_input.lower()):
                 print(f"Detected file operation pattern: {pattern}")
                 return command
-        
+
         # First, check if this is likely a question rather than a command
         is_question = False
         if user_input.strip().endswith("?"):
             is_question = True
-        
+
         # Common question words/phrases that indicate information seeking rather than commands
-        question_indicators = ["how", "what", "why", "when", "where", "can you explain", 
-                              "tell me about", "describe", "information on", "details about"]
-        
+        question_indicators = ["how", "what", "why", "when", "where", "can you explain",
+                               "tell me about", "describe", "information on", "details about"]
+
         for indicator in question_indicators:
             if indicator in user_input.lower():
                 is_question = True
                 break
-        
+
         # If it's clearly a question, skip command detection
         if is_question:
             print("Detected as a question, skipping command detection")
             return ""
-            
+
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -132,12 +140,13 @@ def get_command_gpt(user_input):
         print("Error communicating with OpenAI:", e)
         return None
 
+
 def chat_with_gpt(user_input):
     try:
         if client is None:
             print("OpenAI client not initialized")
             return "Sorry, I'm having trouble connecting to my knowledge base."
-            
+
         system_prompt = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.
 
 Your primary role is to provide information related to **ultrasonic testing, nondestructive testing (NDT), and PAUT data analysis**.
@@ -165,7 +174,7 @@ I can now search for files and folders on your computer to help you load data or
 Stay within these boundaries and maintain a professional and technical tone.
 """
         print(f"Sending request to OpenAI API with user input: {user_input[:50]}...")
-        
+
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -176,12 +185,12 @@ Stay within these boundaries and maintain a professional and technical tone.
                 max_tokens=500,
                 temperature=0.4
             )
-            
+
             response_text = response.choices[0].message.content.strip()
             response_text = response_text.strip("```")
             print(f"Received response from OpenAI API: {response_text[:50]}...")
             return response_text
-            
+
         except openai.APIError as e:
             print(f"OpenAI API Error: {e}")
             return f"I encountered an API error: {str(e)}. Please try again."
@@ -194,7 +203,7 @@ Stay within these boundaries and maintain a professional and technical tone.
         except openai.AuthenticationError as e:
             print(f"OpenAI Authentication Error: {e}")
             return "There's an issue with my authentication. Please contact support."
-            
+
     except Exception as e:
         print(f"Error communicating with OpenAI (detailed): {type(e).__name__}: {e}")
         return f"I encountered an error: {str(e)}"
@@ -207,22 +216,23 @@ def contains_code(response: str) -> bool:
     """
 
     code_patterns = [
-        r"```.*?```",              # Triple backticks for code blocks
-        r"\bimport\b",             # Python imports
-        r"\bclass\b|\bdef\b",      # Python functions and classes
+        r"```.*?```",  # Triple backticks for code blocks
+        r"\bimport\b",  # Python imports
+        r"\bclass\b|\bdef\b",  # Python functions and classes
         r"\bif\b|\belse\b|\bwhile\b|\bfor\b|\btry\b|\bexcept\b",  # Python keywords
-        r"#.*",                    # Comments in Python
-        r";",                      # Common in C, Java, JS
-        r"\{.*?\}",                # Brackets in C-like languages
-        r"<.*?>",                  # HTML tags
-        r"System\.out\.print",      # Java print statement
-        r"console\.log",            # JavaScript print statement
+        r"#.*",  # Comments in Python
+        r";",  # Common in C, Java, JS
+        r"\{.*?\}",  # Brackets in C-like languages
+        r"<.*?>",  # HTML tags
+        r"System\.out\.print",  # Java print statement
+        r"console\.log",  # JavaScript print statement
     ]
 
     for pattern in code_patterns:
         if re.search(pattern, response, re.DOTALL):
             return True
     return False
+
 
 def chat_with_ollama(user_input):
     system_prompt_old = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.\n
@@ -250,33 +260,33 @@ def chat_with_ollama(user_input):
             3. **Assist with PAUTReader software commands** – When asked about software commands, provide the full list:
             {commands_description}
             4. **Help users troubleshoot PAUTReader software issues** – Offer solutions for common problems.
-            
+
             #### **Rules:**
             - **Allowed Topics:**
             - PAUT/NDT concepts, techniques, and industry best practices.
             - How to use PAUTReader software, including available commands.
             - Common troubleshooting steps for PAUTReader software.
-            
+
             - **Restricted Topics (DO NOT Answer):**
             - Questions **not related** to PAUT, NDT, or PAUTReader software.
             - **Programming/code generation** (You cannot write or explain code).
             - General knowledge topics (history, politics, entertainment, etc.).
             - Personal opinions or discussions outside PAUT/NDT.
-            
+
             #### **If the user asks about software commands:**
             - List **only the commands from {commands_description}** and their descriptions.
             - Do **NOT invent additional commands**.
-            
+
             #### **If the question is unrelated to PAUT or NDT:**
             - Respond with: *"I am designed only for PAUT and ultrasonic testing-related tasks."*
-            
+
             Now, respond to the user input below:
-            
+
             [USER]
             {user_input}
-            
+
             [ASSISTANT]
-            
+
             """
 
     response = ollama.generate(
@@ -287,10 +297,11 @@ def chat_with_ollama(user_input):
     response_txt = response['response'].strip()
 
     if contains_code(response_txt):
-        response_txt = "I am AI assistant to work with PAUTReader software based on Mistral model. "\
-                        "I am designed only for PAUT and ultrasonic testing-related tasks."
+        response_txt = "I am AI assistant to work with PAUTReader software based on Mistral model. " \
+                       "I am designed only for PAUT and ultrasonic testing-related tasks."
 
     return response_txt
+
 
 def get_command_ollama(user_input):
     response = ollama.generate(
@@ -298,15 +309,15 @@ def get_command_ollama(user_input):
         # prompt=f"{command_name_extraction}\n\n{user_input}",
         prompt=f"""
                 You are an AI assistant that **ONLY extracts command names** from user input.
-            
+
                 ### **RULES:**
                 1. If the user's request **matches one of the following commands**, **return ONLY the command name** with **no additional text**.
                 2. If the user's input **does NOT match any command**, **return an empty string (`""`)**. **DO NOT explain. DO NOT respond with any text. DO NOT add any formatting.**
                 3. **COMMAND LIST:**
                 {commands_description}
-            
+
                 **USER INPUT:** "{user_input}"
-            
+
                 **YOUR RESPONSE (ONLY command name OR empty string):**
                 """,
         options={"temperature": 0}
@@ -327,6 +338,7 @@ def get_command_ollama(user_input):
     '''
     print(response)
     return response['response'].strip()
+
 
 def status_message(command, args):
     if command == "loadData":
@@ -362,6 +374,7 @@ def extract_folder_ollama(user_input):
     print(response)
     return response['response'].strip()
 
+
 def extract_filename_ollama(user_input):
     system_prompt = "Extract only the file name from the input. Return only the file name. No extra words. No explanations. No formatting."
     response = ollama.generate(
@@ -371,12 +384,13 @@ def extract_filename_ollama(user_input):
     )
     print(response)
     return response['response'].strip()
+
+
 # llama3
 
 def extract_keywords(text):
     doc = nlp(text.lower())
     return [token.lemma_ for token in doc if token.pos_ in ["NOUN", "VERB"] and token.has_vector]
-
 
 
 def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95):
@@ -406,20 +420,48 @@ def extract_arguments(command, user_input):
     warning_txt = ""
 
     if command == "loadData":
+        # Check for full file path in quotes
+        full_path_match = re.search(r'"([^"]+\.(fpd|opd))"', user_input)
+        if full_path_match:
+            full_path = full_path_match.group(1)
+            print(f"Detected full path in quotes: {full_path}")
+            # Check if the file exists
+            if os.path.isfile(full_path):
+                args.append(full_path)
+                print(f"Using full path: {full_path}")
+                return args, warning_txt
+            else:
+                warning_txt = f"File not found at path: {full_path}"
+                print(warning_txt)
+
+        # Check for full file path without quotes
+        full_path_match = re.search(r'(?:open|load)\s+file\s+([A-Za-z]:\\[^\\]+(?:\\[^\\]+)+\.(fpd|opd))', user_input)
+        if full_path_match:
+            full_path = full_path_match.group(1)
+            print(f"Detected full path without quotes: {full_path}")
+            # Check if the file exists
+            if os.path.isfile(full_path):
+                args.append(full_path)
+                print(f"Using full path: {full_path}")
+                return args, warning_txt
+            else:
+                warning_txt = f"File not found at path: {full_path}"
+                print(warning_txt)
+
         # First, try to extract filename using LLM
         filename = extract_filename_ollama(user_input).strip()
         print(f"Extracted filename: '{filename}'")
-        
+
         # Check if we need to look in a specific folder
-        folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
+        folder_match = re.search(r'(?:from|in|at)\s+(?:"([^"]+)"|([^\s,]+))', user_input)
         search_path = None
         if folder_match:
-            folder_name = folder_match.group(1)
+            folder_name = folder_match.group(1) if folder_match.group(1) else folder_match.group(2)
             print(f"Folder mentioned: '{folder_name}'")
             if FILE_FINDER_AVAILABLE:
                 search_path = find_directory_in_system(folder_name)
                 print(f"Found directory: {search_path}")
-        
+
         # If we have a filename, try to find it
         if filename:
             if FILE_FINDER_AVAILABLE:
@@ -435,7 +477,7 @@ def extract_arguments(command, user_input):
                     if not file_path:
                         # Try without extension restriction
                         file_path = find_file_in_system(filename)
-                
+
                 if file_path:
                     args.append(file_path)
                     print(f"Found file path: {file_path}")
@@ -451,13 +493,13 @@ def extract_arguments(command, user_input):
             if match:
                 file_name = match.group(1)
                 print(f"Regex found filename: {file_name}")
-                
+
                 if FILE_FINDER_AVAILABLE:
                     if search_path:
                         file_path = find_file_in_system(file_name, search_path=search_path)
                     else:
                         file_path = find_file_in_system(file_name)
-                    
+
                     if file_path:
                         args.append(file_path)
                     else:
@@ -470,7 +512,7 @@ def extract_arguments(command, user_input):
                     recent_file = get_most_recent_file(search_path, extension="fpd")
                     if not recent_file:
                         recent_file = get_most_recent_file(search_path, extension="opd")
-                    
+
                     if recent_file:
                         args.append(recent_file)
                         print(f"Using most recent file: {recent_file}")
@@ -481,8 +523,22 @@ def extract_arguments(command, user_input):
                     args.append(search_path)
             else:
                 warning_txt = "No valid file or folder found to load data."
-    
+
     elif command == "setNewDirectory":
+        # Check for full directory path in quotes
+        full_path_match = re.search(r'"([^"]+)"', user_input)
+        if full_path_match:
+            full_path = full_path_match.group(1)
+            print(f"Detected full directory path in quotes: {full_path}")
+            # Check if the directory exists
+            if os.path.isdir(full_path):
+                args.extend([full_path, False, ""])
+                print(f"Using full directory path: {full_path}")
+                return args, warning_txt
+            else:
+                warning_txt = f"Directory not found at path: {full_path}"
+                print(warning_txt)
+
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
             # Try to find the folder in the system
@@ -497,8 +553,22 @@ def extract_arguments(command, user_input):
                 args.extend([folder_name, False, ""])
         else:
             warning_txt = "No valid folder name found to update directory."
-    
+
     elif command == "doFolderAnalysis":
+        # Check for full directory path in quotes
+        full_path_match = re.search(r'"([^"]+)"', user_input)
+        if full_path_match:
+            full_path = full_path_match.group(1)
+            print(f"Detected full directory path in quotes: {full_path}")
+            # Check if the directory exists
+            if os.path.isdir(full_path):
+                args.extend([full_path])
+                print(f"Using full directory path: {full_path}")
+                return args, warning_txt
+            else:
+                warning_txt = f"Directory not found at path: {full_path}"
+                print(warning_txt)
+
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
             # Try to find the folder in the system
@@ -513,7 +583,7 @@ def extract_arguments(command, user_input):
                 args.extend([folder_name])
         else:
             warning_txt = "No valid folder name found to make analysis. \n Working with current directory"
-    
+
     return args, warning_txt
     return args, warning_txt
     return args, warning_txt
@@ -541,17 +611,19 @@ def process_input_legacy(user_input):
         # print("Error processing input:", e)
     return progress_txt
 
+
 def command_listener_legacy():
     while True:
         command, args = command_queue.get()
         msg, response = execute_command_gui(command, *args)
         command_queue.task_done()
 
+
 def extract_text(audio_bytes):
     if client is None:
         print("OpenAI client not initialized")
         return "Error: Unable to connect to speech recognition service"
-        
+
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, 'wb') as wf:
         wf.setnchannels(1)  # mono - one channel
@@ -568,7 +640,7 @@ def extract_text(audio_bytes):
             file=wav_buffer,
             language="en"  # TODO: add ability to choose the language
         )
-        
+
         if transcript:
             extracted_text = transcript.text
             return extracted_text
@@ -577,8 +649,6 @@ def extract_text(audio_bytes):
     except Exception as e:
         print(f"Error transcribing audio: {e}")
         return f"Error: {str(e)}"
-
-
 
 
 def run_chat_bot():
