@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject, pyqtSlot
 from voice_recognition import VoiceRecognizer
 from command_process import execute_command_gui
 from prompts import commands_description
+from chat_bubble import ChatBubble
 
 # Import from the updated file
 import ai_functions_keeper_updated as ai_functions
@@ -22,7 +23,7 @@ MAX_HISTORY_ENTRIES = 100
 command_queue = Queue()  # Global command queue for compatibility
 
 class TextEdit(QtWidgets.QTextEdit):
-    def __init__(self, alignment='right', bubble_color="#323232", parent=None):
+    def __init__(self, alignment='right', bubble_color="#F5FAFF", parent=None):
         super().__init__(parent)
         self.alignment = alignment
         self.bubble_color = QtGui.QColor(bubble_color)
@@ -37,6 +38,14 @@ class TextEdit(QtWidgets.QTextEdit):
         self.document().documentLayout().documentSizeChanged.connect(self.update_size)
         # Use improved width
         self.setFixedWidth(400)
+        
+        # Set transparent background
+        palette = self.palette()
+        palette.setBrush(QtGui.QPalette.ColorRole.Base, QtGui.QBrush(QtCore.Qt.GlobalColor.transparent))
+        self.setPalette(palette)
+        
+        # Add padding to the text
+        self.document().setDocumentMargin(10)
 
     def update_size(self):
         doc_height = int(round(self.document().size().height())) + 10
@@ -64,16 +73,47 @@ class TextEdit(QtWidgets.QTextEdit):
 
             unitedBlockRect = blockRect.united(lineRect)
 
-        bubble_width = unitedBlockRect.width()
-        bubble_height = unitedBlockRect.height()
-
+        # Calculate bubble dimensions with proper padding
+        bubble_width = unitedBlockRect.width() + margin * 2
+        bubble_height = unitedBlockRect.height() + margin * 2
+        
+        # Draw the bubble with rounded corners
         if self.alignment == 'right':
-            x = self.viewport().width() - bubble_width - margin
+            # User message (right side)
+            rect = QtCore.QRectF(self.width() - bubble_width - margin, margin, bubble_width, bubble_height)
+            radius = 15
+            
+            path = QtGui.QPainterPath()
+            path.moveTo(rect.right() - radius, rect.top())
+            path.lineTo(rect.left() + radius, rect.top())
+            path.arcTo(rect.left(), rect.top(), radius * 2, radius * 2, 90, 90)
+            path.lineTo(rect.left(), rect.bottom() - radius)
+            path.arcTo(rect.left(), rect.bottom() - radius * 2, radius * 2, radius * 2, 180, 90)
+            path.lineTo(rect.right() - radius, rect.bottom())
+            path.arcTo(rect.right() - radius * 2, rect.bottom() - radius * 2, radius * 2, radius * 2, 270, 90)
+            path.lineTo(rect.right(), rect.top() + radius)
+            path.arcTo(rect.right() - radius * 2, rect.top(), radius * 2, radius * 2, 0, 90)
+            path.closeSubpath()
+            
+            painter.drawPath(path)
         else:
-            x = margin
-
-        rect = QtCore.QRectF(x, margin, bubble_width, bubble_height)
-        painter.drawRoundedRect(rect, 15, 15)  # Improved rounded corners
+            # Assistant message (left side)
+            rect = QtCore.QRectF(margin, margin, bubble_width, bubble_height)
+            radius = 15
+            
+            path = QtGui.QPainterPath()
+            path.moveTo(rect.right() - radius, rect.top())
+            path.lineTo(rect.left() + radius, rect.top())
+            path.arcTo(rect.left(), rect.top(), radius * 2, radius * 2, 90, 90)
+            path.lineTo(rect.left(), rect.bottom() - radius)
+            path.arcTo(rect.left(), rect.bottom() - radius * 2, radius * 2, radius * 2, 180, 90)
+            path.lineTo(rect.right() - radius, rect.bottom())
+            path.arcTo(rect.right() - radius * 2, rect.bottom() - radius * 2, radius * 2, radius * 2, 270, 90)
+            path.lineTo(rect.right(), rect.top() + radius)
+            path.arcTo(rect.right() - radius * 2, rect.top(), radius * 2, radius * 2, 0, 90)
+            path.closeSubpath()
+            
+            painter.drawPath(path)
 
         super().paintEvent(event)
 
@@ -183,25 +223,23 @@ class ChatWindow(QtWidgets.QMainWindow):
         input_layout.addWidget(self.micButton)
         main_layout.addLayout(input_layout)
 
-        # Set colors
-        self.user_color = QtGui.QColor("#91BDF8")
-        self.assist_color = QtGui.QColor("#B4D4FF")
-        self.textColor = QtGui.QColor("#111518")
-        self.backgroundColor = QtGui.QColor("#F5FAFF")
-
         # Connect signals
         self.sendButton.clicked.connect(self.send_message)
         
-        # Set application style
+        # Set application style - light background
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #F5FAFF;
+                background-color: #F5FFFE;
             }
             QScrollArea {
-                background-color: #F5FAFF;
+                background-color: #F5FFFE;
                 border: none;
             }
+            QWidget#chat_container {
+                background-color: #F5FFFE;
+            }
         """)
+        self.chat_container.setObjectName("chat_container")  # Set object name for styling
 
     def eventFilter(self, source, event):
         if source == self.inputField:
@@ -284,21 +322,16 @@ class ChatWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(str)
     def display_user_message(self, message):
-        user_bubble = TextEdit(alignment='right', bubble_color=self.user_color.name())
         message = message.replace('\n', '<br>')
-        user_bubble.setHtml(f'<span style="color:{self.textColor.name()}"><b>You:</b><br>{message}</span>')
-        user_bubble.update_size()
-        self.chat_layout.addWidget(user_bubble, alignment=Qt.AlignmentFlag.AlignRight)
+        bubble = ChatBubble(message, is_user=True)
+        self.chat_layout.addWidget(bubble)
         QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
 
     @pyqtSlot(str)
     def display_assistant_message(self, response):
-        assistant_bubble = TextEdit(alignment='left', bubble_color=self.assist_color.name())
         response = response.replace('\n', '<br>')
-        assistant_bubble.setHtml(
-            f'<span style="color:{self.textColor.name()}"><b>Assistant:</b><br>{response}</span>')
-        assistant_bubble.update_size()
-        self.chat_layout.addWidget(assistant_bubble, alignment=Qt.AlignmentFlag.AlignLeft)
+        bubble = ChatBubble(response, is_user=False)
+        self.chat_layout.addWidget(bubble)
         QtCore.QTimer.singleShot(100, self.auto_scroll_bottom)
 
     def auto_scroll_bottom(self):
