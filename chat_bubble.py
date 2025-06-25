@@ -17,13 +17,19 @@ class ChatBubble(QtWidgets.QWidget):
         self.message = message
         self.is_user = is_user
         
-        # Set up colors
+        # Set up colors - explicitly define bubble colors
         self.user_bubble_color = QtGui.QColor("#91BDF8")  # Blue for user
         self.assistant_bubble_color = QtGui.QColor("#B4D4FF")  # Light blue for assistant
         self.text_color = QtGui.QColor("#111518")  # Dark text
         
+        # Make widget background transparent so it doesn't inherit parent's background
+        self.setStyleSheet("background-color: transparent;")
+        
         # Set up the layout
         self.init_ui()
+        
+        # Prevent text cursor errors and ensure proper styling
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         
     def init_ui(self):
         # Set up the main layout
@@ -38,7 +44,7 @@ class ChatBubble(QtWidgets.QWidget):
         bubble_layout = QtWidgets.QVBoxLayout(self.bubble)
         bubble_layout.setContentsMargins(12, 8, 12, 8)
         
-        # Create the text label
+        # Create the text label - use QLabel instead of QTextEdit to avoid cursor issues
         self.text_label = QtWidgets.QLabel(self.message)
         self.text_label.setWordWrap(True)
         self.text_label.setTextFormat(Qt.TextFormat.RichText)
@@ -88,7 +94,9 @@ class ChatBubble(QtWidgets.QWidget):
         return self.bubble.sizeHint()
         
     def resizeEvent(self, event):
-        # Handle resize events safely
+        # Handle resize events safely without touching text cursors
         super().resizeEvent(event)
-        # No need to manually adjust text cursor positions
-        # Using QLabel instead of QTextEdit avoids cursor position issues
+        
+    # Override paintEvent to avoid any text cursor operations
+    def paintEvent(self, event):
+        super().paintEvent(event)

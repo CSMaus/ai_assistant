@@ -226,20 +226,43 @@ class ChatWindow(QtWidgets.QMainWindow):
         # Connect signals
         self.sendButton.clicked.connect(self.send_message)
         
-        # Set application style - light background
+        # Set application style - explicitly set background to #F5FCFF
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #F5FFFE;
+                background-color: #F5FCFF;
             }
             QScrollArea {
-                background-color: #F5FFFE;
+                background-color: #F5FCFF;
                 border: none;
             }
             QWidget#chat_container {
-                background-color: #F5FFFE;
+                background-color: #F5FCFF;
             }
         """)
-        self.chat_container.setObjectName("chat_container")  # Set object name for styling
+        
+        # Set object name for styling
+        self.chat_container.setObjectName("chat_container")
+        
+        # Explicitly set background colors for all widgets to ensure they're not system-defined
+        central_widget.setStyleSheet("background-color: #F5FCFF;")
+        self.scroll_area.setStyleSheet("background-color: #F5FCFF;")
+        self.chat_container.setStyleSheet("background-color: #F5FCFF;")
+        
+        # Force the background color to be applied
+        central_widget.setAutoFillBackground(True)
+        self.scroll_area.setAutoFillBackground(True)
+        self.chat_container.setAutoFillBackground(True)
+        
+        # Set palette colors as well to ensure background is properly set
+        palette = QtGui.QPalette()
+        background_color = QtGui.QColor("#F5FCFF")
+        palette.setColor(QtGui.QPalette.ColorRole.Window, background_color)
+        palette.setColor(QtGui.QPalette.ColorRole.Base, background_color)
+        
+        self.setPalette(palette)
+        central_widget.setPalette(palette)
+        self.scroll_area.setPalette(palette)
+        self.chat_container.setPalette(palette)
 
     def eventFilter(self, source, event):
         if source == self.inputField:
