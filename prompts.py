@@ -62,6 +62,11 @@ Response:
 commands_names_extraction = f"""Here is list of commands with their descriptions:
 {commands_description}
 
+IMPORTANT INSTRUCTIONS:
+- CAREFULLY ANALYZE the user's request for ALL actions they want to perform
+- If the user wants to perform MULTIPLE actions (like "open a file AND run defect detection"), return ALL relevant command names separated by commas
+- Pay special attention to requests that combine file operations with analysis operations
+
 IMPORTANT DISTINCTION:
 - If the user is asking you to PERFORM an action (like "run defect detection" or "open this file"), return the command name.
 - If the user is asking for INFORMATION about a topic (like "how to detect defects" or "explain defect detection"), return an empty string.
@@ -76,6 +81,15 @@ return only an empty string.
 Examples:
 User: "Run defect detection on this file"
 Response: startDefectDetection
+
+User: "Open file test.opd and run defect detection"
+Response: loadData,startDefectDetection
+
+User: "Can you load the scan data and then analyze it for defects?"
+Response: loadData,startDefectDetection
+
+User: "Open the file and show me its information"
+Response: loadData,getFileInformation
 
 User: "How can I find defects in PAUT data?"
 Response: 

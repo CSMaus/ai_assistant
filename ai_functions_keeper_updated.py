@@ -87,7 +87,24 @@ def get_command_gpt(user_input):
         if client is None:
             print("OpenAI client not initialized")
             return None
-
+        
+        # Check for combined operations like "open file and find defects"
+        combined_operations = [
+            (r"open.*(?:and|then).*defect", "loadData,startDefectDetection"),
+            (r"load.*(?:and|then).*defect", "loadData,startDefectDetection"),
+            (r"open.*(?:and|then).*analysis", "loadData,doAnalysisSNR"),
+            (r"load.*(?:and|then).*analysis", "loadData,doAnalysisSNR"),
+            (r"open.*(?:and|then).*information", "loadData,getFileInformation"),
+            (r"load.*(?:and|then).*information", "loadData,getFileInformation"),
+            (r"defect.*(?:and|then).*report", "startDefectDetection,makeSingleFileOnly"),
+            (r"analysis.*(?:and|then).*report", "doAnalysisSNR,makeSingleFileOnly")
+        ]
+        
+        for pattern, commands in combined_operations:
+            if re.search(pattern, user_input.lower()):
+                print(f"Detected combined operation pattern: {pattern}")
+                return commands
+        
         # Check for file operations first - these should take priority
         file_operation_patterns = [
             (r"open.*file", "loadData"),
@@ -99,10 +116,26 @@ def get_command_gpt(user_input):
             (r"\.fpd", "loadData"),
             (r"\.opd", "loadData")
         ]
-
+        
         for pattern, command in file_operation_patterns:
             if re.search(pattern, user_input.lower()):
                 print(f"Detected file operation pattern: {pattern}")
+                
+                # Check if there's also a defect detection request
+                if re.search(r"defect|flaw|detect", user_input.lower()):
+                    print("Also detected defect detection request")
+                    return "loadData,startDefectDetection"
+                
+                # Check if there's also an analysis request
+                if re.search(r"analysis|analyze|snr", user_input.lower()):
+                    print("Also detected analysis request")
+                    return "loadData,doAnalysisSNR"
+                
+                # Check if there's also an information request
+                if re.search(r"information|details|metadata", user_input.lower()):
+                    print("Also detected information request")
+                    return "loadData,getFileInformation"
+                
                 return command
 
         # First, check if this is likely a question rather than a command
@@ -120,7 +153,7 @@ def get_command_gpt(user_input):
                 break
 
         # If it's clearly a question, skip command detection
-        if is_question:
+        if is_question and not re.search(r"can you (open|load|run|find|detect|analyze)", user_input.lower()):
             print("Detected as a question, skipping command detection")
             return ""
 

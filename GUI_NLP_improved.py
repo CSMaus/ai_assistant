@@ -543,17 +543,31 @@ class ChatWindow(QtWidgets.QMainWindow):
                 commands = ai_functions.parse_comma_separated(commands)
                 if commands:  # Check if parse_comma_separated returned a valid list
                     print("Commands list is: ", commands)
-                    for command in commands:
-                        print(f"Command received from AI is {command}")
+                    
+                    # Process all commands in sequence
+                    for i, command in enumerate(commands):
+                        print(f"Processing command {i+1}/{len(commands)}: {command}")
+                        
                         if command in ["loadData", "updatePlot", "getFileInformation", "getDirectory",
                                       "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                                       "doFolderAnalysis"]:
                             args, warning_txt = ai_functions.extract_arguments(command, user_input)
-                            progress_txt = ai_functions.status_message(command, args)
+                            
+                            # For the first command, display progress message
+                            if i == 0:
+                                progress_txt = ai_functions.status_message(command, args)
+                                if warning_txt:
+                                    progress_txt += f"\n{warning_txt}"
+                                self.display_assistant_message_from_thread(str(progress_txt))
+                            
+                            # Queue the command for execution
                             command_queue.put((command, args))
-                            if warning_txt:
-                                progress_txt += f"\n{warning_txt}"
                             command_executed = True
+                            
+                            # If this is not the last command, add a small delay
+                            if i < len(commands) - 1:
+                                time.sleep(0.5)  # Small delay between commands
+                        
                         elif command == ", ".join(["loadData", "updatePlot", "getFileInformation", "getDirectory",
                                       "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                                       "doFolderAnalysis"]):
