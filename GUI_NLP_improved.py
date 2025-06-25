@@ -148,6 +148,31 @@ class ChatWindow(QtWidgets.QMainWindow):
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
+        
+        # Add language selector in the top right
+        top_bar = QtWidgets.QHBoxLayout()
+        top_bar.addStretch(1)  # Push language selector to the right
+        
+        # Create language menu button with icon
+        self.language_button = QtWidgets.QPushButton()
+        self.language_button.setIcon(QtGui.QIcon("icons/AI-Assistant_icon.jpg"))
+        self.language_button.setIconSize(QtCore.QSize(24, 24))
+        self.language_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #E3F2FD;
+                border-radius: 12px;
+            }
+        """)
+        self.language_button.setToolTip("Change Voice Recognition Language")
+        self.language_button.clicked.connect(self.show_language_menu)
+        
+        top_bar.addWidget(self.language_button)
+        main_layout.addLayout(top_bar)
 
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -263,6 +288,36 @@ class ChatWindow(QtWidgets.QMainWindow):
         central_widget.setPalette(palette)
         self.scroll_area.setPalette(palette)
         self.chat_container.setPalette(palette)
+
+    def show_language_menu(self):
+        """Show the language selection menu for voice recognition"""
+        menu = QtWidgets.QMenu(self)
+
+        languages = [{"name": "English", "code": "en"},
+            {"name": "한국어 (Korean)", "code": "ko"},
+            {"name": "日本語 (Japanese)", "code": "ja"},
+            {"name": "中文 (Chinese)", "code": "zh"},
+            {"name": "Español (Spanish)", "code": "es"},
+            {"name": "Français (French)", "code": "fr"},
+            {"name": "Deutsch (German)", "code": "de"},
+            {"name": "Русский (Russian)", "code": "ru"}
+        ]
+
+        for lang in languages:
+            action = menu.addAction(lang["name"])
+            action.setCheckable(True)
+            action.setChecked(self.voice_recognizer.language == lang["code"])
+            action.triggered.connect(
+                lambda checked, code=lang["code"], name=lang["name"]: self.change_voice_language(code, name))
+
+        menu.exec(self.language_button.mapToGlobal(QtCore.QPoint(0, self.language_button.height())))
+
+    def change_voice_language(self, language_code, language_name):
+        """Change the voice recognition language"""
+        if language_code != self.voice_recognizer.language:
+            self.voice_recognizer.language = language_code
+            self.display_assistant_message(f"Voice recognition language changed to {language_name}.")
+            self.language_button.setToolTip(f"Voice Recognition Language: {language_name}")
 
     def eventFilter(self, source, event):
         if source == self.inputField:

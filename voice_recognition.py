@@ -22,6 +22,7 @@ class VoiceRecognizer(QObject):
         self.sample_rate = 16000
         self.channels = 1
         self.recording_thread = None
+        self.language = "en"  # Default language is English
         
         # Initialize OpenAI client
         self.client = None
@@ -140,7 +141,7 @@ class VoiceRecognizer(QObject):
                     transcript = self.client.audio.transcriptions.create(
                         model="whisper-1",
                         file=audio_file,
-                        language="en"
+                        language=self.language
                     )
                 
                 # Extract transcribed text
