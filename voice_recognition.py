@@ -4,6 +4,7 @@ import tempfile
 import os
 import threading
 import time
+import platform
 from PyQt6.QtCore import QObject, pyqtSignal
 from openai import OpenAI
 
@@ -29,9 +30,18 @@ class VoiceRecognizer(QObject):
         try:
             with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
                 api_key = file.read().strip()
-                self.client = OpenAI(api_key=api_key)
+                
+                # Check the operating system to handle platform-specific initialization
+                if platform.system() == "Windows":
+                    # On Windows, don't use the proxies parameter
+                    self.client = OpenAI(api_key=api_key)
+                else:
+                    # On macOS and other systems, use the standard initialization
+                    self.client = OpenAI(api_key=api_key)
+                    
+                print(f"Voice recognizer OpenAI client initialized successfully on {platform.system()}")
         except Exception as e:
-            print(f"Error initializing OpenAI client: {e}")
+            print(f"Error initializing OpenAI client for voice recognition: {e}")
     
     def start_recording(self):
         """Start recording audio"""
