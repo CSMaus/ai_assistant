@@ -161,21 +161,39 @@ I can now search for files and folders on your computer to help you load data or
 
 Stay within these boundaries and maintain a professional and technical tone.
 """
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ],
-            max_tokens=500,
-            temperature=0.4
-        )
-
-        response_text = response.choices[0].message.content.strip()
-        response_text = response_text.strip("```")
-        return response_text
+        print(f"Sending request to OpenAI API with user input: {user_input[:50]}...")
+        
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                max_tokens=500,
+                temperature=0.4
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            response_text = response_text.strip("```")
+            print(f"Received response from OpenAI API: {response_text[:50]}...")
+            return response_text
+            
+        except openai.APIError as e:
+            print(f"OpenAI API Error: {e}")
+            return f"I encountered an API error: {str(e)}. Please try again."
+        except openai.RateLimitError as e:
+            print(f"OpenAI Rate Limit Error: {e}")
+            return "I'm currently receiving too many requests. Please try again in a moment."
+        except openai.APIConnectionError as e:
+            print(f"OpenAI API Connection Error: {e}")
+            return "I'm having trouble connecting to my knowledge base. Please check your internet connection."
+        except openai.AuthenticationError as e:
+            print(f"OpenAI Authentication Error: {e}")
+            return "There's an issue with my authentication. Please contact support."
+            
     except Exception as e:
-        print("Error communicating with OpenAI:", e)
+        print(f"Error communicating with OpenAI (detailed): {type(e).__name__}: {e}")
         return f"I encountered an error: {str(e)}"
 
 

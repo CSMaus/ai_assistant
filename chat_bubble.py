@@ -51,12 +51,18 @@ class ChatBubble(QtWidgets.QWidget):
         fm = QtGui.QFontMetrics(self.text_label.font())
         text_width = fm.horizontalAdvance(self.message.replace('<br>', ' '))
         
-        # Set word wrap only if the text is longer than the maximum width
-        if text_width > 400:
-            self.text_label.setWordWrap(True)
-        else:
-            self.text_label.setWordWrap(False)
+        # Always set word wrap to true for HTML content
+        self.text_label.setWordWrap(True)
+        
+        # Set minimum width for short messages to prevent excessive narrowness
+        min_width = 100
+        if text_width < min_width:
+            text_width = min_width
             
+        # Set fixed width for the text label based on content
+        if text_width < 350:  # For shorter messages
+            self.text_label.setMinimumWidth(text_width + 20)  # Add padding
+        
         self.text_label.setTextFormat(Qt.TextFormat.RichText)
         self.text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
