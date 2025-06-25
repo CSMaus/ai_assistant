@@ -171,3 +171,5 @@ test-First-combo-side1.bvh
 key.txt
 .DS_Store
 GUI_2.py
+test_whisper.py
+/debug_audio

@@ -6,10 +6,12 @@ import subprocess
 import os
 import re
 import platform
+import glob
+import sys
 
 def find_file_in_system(filename, search_path=None, file_extension=None):
     """
-    Search for a file in the system using terminal commands.
+    Search for a file in the system using platform-appropriate methods.
     
     Args:
         filename: The name of the file to search for (can be partial)
@@ -34,7 +36,7 @@ def find_file_in_system(filename, search_path=None, file_extension=None):
                 return potential_path
         
         # Clean up the filename to handle special characters
-        clean_filename = re.sub(r'[^\w\s.-]', '', filename)
+        clean_filename = filename
         
         # Determine the search paths
         search_paths = []
@@ -55,10 +57,17 @@ def find_file_in_system(filename, search_path=None, file_extension=None):
             paut_data_dir = os.path.join(desktop_dir, "PAUT data")
             if os.path.exists(paut_data_dir):
                 search_paths.append(paut_data_dir)
-                # Add NaWooData subfolder if it exists
-                nawoo_dir = os.path.join(paut_data_dir, "NaWooData")
-                if os.path.exists(nawoo_dir):
-                    search_paths.append(nawoo_dir)
+                # Look for NaWooData subfolder
+                for item in os.listdir(paut_data_dir):
+                    if "NaWooData" in item:
+                        nawoo_dir = os.path.join(paut_data_dir, item)
+                        if os.path.isdir(nawoo_dir):
+                            search_paths.append(nawoo_dir)
+                            # Also add any subfolders that might contain Korean characters
+                            for subitem in os.listdir(nawoo_dir):
+                                subdir = os.path.join(nawoo_dir, subitem)
+                                if os.path.isdir(subdir):
+                                    search_paths.append(subdir)
         
         # Add Documents directory
         if os.path.exists(documents_dir):
@@ -73,32 +82,25 @@ def find_file_in_system(filename, search_path=None, file_extension=None):
         print(f"Searching for file: {filename}")
         print(f"Search paths: {search_paths}")
         
-        # Determine the command based on the operating system
-        is_windows = platform.system() == "Windows"
-        
+        # Use Python's built-in glob module instead of shell commands
         for path in search_paths:
             print(f"Searching in: {path}")
             
-            if is_windows:
-                # Windows command (using PowerShell)
-                if file_extension:
-                    cmd = f'powershell -Command "Get-ChildItem -Path \'{path}\' -Recurse -Depth 3 -File -Filter *{clean_filename}*.{file_extension} | Select-Object -First 1 -ExpandProperty FullName"'
-                else:
-                    cmd = f'powershell -Command "Get-ChildItem -Path \'{path}\' -Recurse -Depth 3 -File -Filter *{clean_filename}* | Select-Object -First 1 -ExpandProperty FullName"'
+            # Create search patterns
+            if file_extension:
+                search_pattern = os.path.join(path, "**", f"*{clean_filename}*.{file_extension}")
             else:
-                # Unix command (macOS, Linux)
-                if file_extension:
-                    cmd = f"find '{path}' -maxdepth 3 -type f -name '*{clean_filename}*.{file_extension}' 2>/dev/null | head -n 1"
-                else:
-                    cmd = f"find '{path}' -maxdepth 3 -type f -name '*{clean_filename}*' 2>/dev/null | head -n 1"
+                search_pattern = os.path.join(path, "**", f"*{clean_filename}*")
             
-            print(f"Executing search command: {cmd}")
-            result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-            
-            if result.stdout.strip():
-                file_path = result.stdout.strip()
-                print(f"Found file: {file_path}")
-                return file_path
+            # Use glob with recursive search
+            try:
+                matches = glob.glob(search_pattern, recursive=True)
+                if matches:
+                    file_path = matches[0]
+                    print(f"Found file: {file_path}")
+                    return file_path
+            except Exception as e:
+                print(f"Error searching in {path}: {e}")
         
         # If we get here, we didn't find the file in any of the search paths
         print(f"No file found matching '{filename}' in any of the search paths")
@@ -110,7 +112,7 @@ def find_file_in_system(filename, search_path=None, file_extension=None):
 
 def find_directory_in_system(dirname, search_path=None):
     """
-    Search for a directory in the system using terminal commands.
+    Search for a directory in the system using platform-appropriate methods.
     
     Args:
         dirname: The name of the directory to search for (can be partial)
@@ -132,9 +134,6 @@ def find_directory_in_system(dirname, search_path=None):
             if os.path.isdir(potential_path):
                 print(f"Using expanded path: {potential_path}")
                 return potential_path
-        
-        # Clean up the dirname to handle special characters
-        clean_dirname = re.sub(r'[^\w\s.-]', '', dirname)
         
         # First, check for common user directories with exact name match (case-insensitive)
         common_dirs = ["Documents", "Desktop", "Downloads", "Pictures", "Music", "Videos", "Movies", "PAUT data"]
@@ -176,26 +175,20 @@ def find_directory_in_system(dirname, search_path=None):
         # Remove duplicates while preserving order
         search_paths = list(dict.fromkeys(search_paths))
         
-        # Determine the command based on the operating system
-        is_windows = platform.system() == "Windows"
-        
+        # Use Python's built-in os.walk instead of shell commands
         for path in search_paths:
             print(f"Searching for directory '{dirname}' in: {path}")
             
-            if is_windows:
-                # Windows command (using PowerShell)
-                cmd = f'powershell -Command "Get-ChildItem -Path \'{path}\' -Directory -Recurse -Depth 2 -Filter *{clean_dirname}* | Select-Object -First 1 -ExpandProperty FullName"'
-            else:
-                # Unix command (macOS, Linux)
-                cmd = f"find '{path}' -maxdepth 2 -type d -name '*{clean_dirname}*' 2>/dev/null | head -n 1"
-            
-            print(f"Executing search command: {cmd}")
-            result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-            
-            if result.stdout.strip():
-                dir_path = result.stdout.strip()
-                print(f"Found directory: {dir_path}")
-                return dir_path
+            for root, dirs, _ in os.walk(path):
+                # Limit depth to avoid excessive searching
+                if root.count(os.sep) - path.count(os.sep) > 2:
+                    continue
+                    
+                for dir_name in dirs:
+                    if dirname.lower() in dir_name.lower():
+                        dir_path = os.path.join(root, dir_name)
+                        print(f"Found directory: {dir_path}")
+                        return dir_path
         
         print(f"No directory found matching '{dirname}'")
         return None
@@ -221,23 +214,15 @@ def find_files_by_extension(extension, search_path=None, limit=10):
         if not search_path:
             search_path = os.path.expanduser("~")  # Default to user's home directory
         
-        # Determine the command based on the operating system
-        is_windows = platform.system() == "Windows"
+        # Use Python's built-in glob module
+        search_pattern = os.path.join(search_path, "**", f"*.{extension}")
+        matches = glob.glob(search_pattern, recursive=True)
         
-        if is_windows:
-            # Windows command (using PowerShell)
-            cmd = f'powershell -Command "Get-ChildItem -Path \'{search_path}\' -Recurse -Depth 3 -File -Filter *.{extension} | Select-Object -First {limit} -ExpandProperty FullName"'
-        else:
-            # Unix command (macOS, Linux)
-            cmd = f"find '{search_path}' -maxdepth 3 -type f -name '*.{extension}' 2>/dev/null | head -n {limit}"
-        
-        print(f"Executing search command: {cmd}")
-        result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-        
-        if result.stdout.strip():
-            file_paths = result.stdout.strip().split('\n')
-            print(f"Found {len(file_paths)} files with extension .{extension}")
-            return file_paths
+        if matches:
+            # Limit the number of results
+            limited_matches = matches[:limit]
+            print(f"Found {len(limited_matches)} files with extension .{extension}")
+            return limited_matches
         else:
             print(f"No files found with extension .{extension}")
             return []
@@ -262,29 +247,25 @@ def get_most_recent_file(directory, extension=None):
             print(f"Directory does not exist: {directory}")
             return None
         
-        # Determine the command based on the operating system
-        is_windows = platform.system() == "Windows"
+        # Use Python's built-in functions to find the most recent file
+        most_recent_file = None
+        most_recent_time = 0
         
-        if is_windows:
-            # Windows command (using PowerShell)
-            if extension:
-                cmd = f'powershell -Command "Get-ChildItem -Path \'{directory}\' -File -Filter *.{extension} | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName"'
-            else:
-                cmd = f'powershell -Command "Get-ChildItem -Path \'{directory}\' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName"'
-        else:
-            # Unix command (macOS, Linux)
-            if extension:
-                cmd = f"find '{directory}' -type f -name '*.{extension}' -print0 | xargs -0 ls -lt | head -n 1 | awk '{{print $NF}}'"
-            else:
-                cmd = f"find '{directory}' -type f -print0 | xargs -0 ls -lt | head -n 1 | awk '{{print $NF}}'"
-            
-        print(f"Executing command: {cmd}")
-        result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if extension and not file.lower().endswith(f".{extension.lower()}"):
+                    continue
+                    
+                file_path = os.path.join(root, file)
+                file_time = os.path.getmtime(file_path)
+                
+                if file_time > most_recent_time:
+                    most_recent_time = file_time
+                    most_recent_file = file_path
         
-        if result.stdout.strip():
-            file_path = result.stdout.strip()
-            print(f"Most recent file: {file_path}")
-            return file_path
+        if most_recent_file:
+            print(f"Most recent file: {most_recent_file}")
+            return most_recent_file
         else:
             print(f"No files found in {directory}")
             return None
