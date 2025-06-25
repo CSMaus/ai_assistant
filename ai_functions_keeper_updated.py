@@ -88,7 +88,103 @@ def get_command_gpt(user_input):
             print("OpenAI client not initialized")
             return None
         
-        # Check for combined operations like "open file and find defects"
+        # Detect language of the input
+        is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
+        is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
+        
+        print(f"Language detection - Korean: {is_korean}, Russian: {is_russian}")
+        
+        # Check for combined operations in Korean
+        if is_korean:
+            korean_combined_operations = [
+                (r"파일.*열.*결함", "loadData,startDefectDetection"),  # Open file and search for defects
+                (r"파일.*열.*분석", "loadData,doAnalysisSNR"),         # Open file and analyze
+                (r"파일.*열.*정보", "loadData,getFileInformation"),    # Open file and show information
+                (r"결함.*보고서", "startDefectDetection,makeSingleFileOnly"),  # Defect detection and report
+                (r"분석.*보고서", "doAnalysisSNR,makeSingleFileOnly")  # Analysis and report
+            ]
+            
+            for pattern, commands in korean_combined_operations:
+                if re.search(pattern, user_input):
+                    print(f"Detected Korean combined operation pattern: {pattern}")
+                    return commands
+            
+            # Check for file operations in Korean
+            korean_file_operations = [
+                (r"파일.*열", "loadData"),      # Open file
+                (r"파일.*로드", "loadData"),    # Load file
+                (r"데이터.*열", "loadData"),    # Open data
+                (r"\.fpd", "loadData"),
+                (r"\.opd", "loadData")
+            ]
+            
+            for pattern, command in korean_file_operations:
+                if re.search(pattern, user_input):
+                    print(f"Detected Korean file operation pattern: {pattern}")
+                    
+                    # Check if there's also a defect detection request in Korean
+                    if re.search(r"결함|검색|탐지", user_input):
+                        print("Also detected Korean defect detection request")
+                        return "loadData,startDefectDetection"
+                    
+                    # Check if there's also an analysis request in Korean
+                    if re.search(r"분석|SNR|신호", user_input):
+                        print("Also detected Korean analysis request")
+                        return "loadData,doAnalysisSNR"
+                    
+                    # Check if there's also an information request in Korean
+                    if re.search(r"정보|상세|메타데이터", user_input):
+                        print("Also detected Korean information request")
+                        return "loadData,getFileInformation"
+                    
+                    return command
+        
+        # Check for combined operations in Russian
+        if is_russian:
+            russian_combined_operations = [
+                (r"файл.*откр.*дефект", "loadData,startDefectDetection"),  # Open file and search for defects
+                (r"файл.*откр.*анализ", "loadData,doAnalysisSNR"),         # Open file and analyze
+                (r"файл.*откр.*информац", "loadData,getFileInformation"),   # Open file and show information
+                (r"дефект.*отчет", "startDefectDetection,makeSingleFileOnly"),  # Defect detection and report
+                (r"анализ.*отчет", "doAnalysisSNR,makeSingleFileOnly")      # Analysis and report
+            ]
+            
+            for pattern, commands in russian_combined_operations:
+                if re.search(pattern, user_input.lower()):
+                    print(f"Detected Russian combined operation pattern: {pattern}")
+                    return commands
+            
+            # Check for file operations in Russian
+            russian_file_operations = [
+                (r"файл.*откр", "loadData"),    # Open file
+                (r"загруз.*файл", "loadData"),  # Load file
+                (r"данны.*откр", "loadData"),   # Open data
+                (r"\.fpd", "loadData"),
+                (r"\.opd", "loadData")
+            ]
+            
+            for pattern, command in russian_file_operations:
+                if re.search(pattern, user_input.lower()):
+                    print(f"Detected Russian file operation pattern: {pattern}")
+                    
+                    # Check if there's also a defect detection request in Russian
+                    if re.search(r"дефект|поиск|обнаруж", user_input.lower()):
+                        print("Also detected Russian defect detection request")
+                        return "loadData,startDefectDetection"
+                    
+                    # Check if there's also an analysis request in Russian
+                    if re.search(r"анализ|снр|сигнал", user_input.lower()):
+                        print("Also detected Russian analysis request")
+                        return "loadData,doAnalysisSNR"
+                    
+                    # Check if there's also an information request in Russian
+                    if re.search(r"информац|детал|метадан", user_input.lower()):
+                        print("Also detected Russian information request")
+                        return "loadData,getFileInformation"
+                    
+                    return command
+        
+        # Check for combined operations like "open file and find defects" (English)
         combined_operations = [
             (r"open.*(?:and|then).*defect", "loadData,startDefectDetection"),
             (r"load.*(?:and|then).*defect", "loadData,startDefectDetection"),

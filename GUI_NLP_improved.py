@@ -575,7 +575,7 @@ class ChatWindow(QtWidgets.QMainWindow):
                                 progress_txt = ai_functions.status_message(command, args)
                                 if warning_txt:
                                     progress_txt += f"\n{warning_txt}"
-                                self.display_assistant_message_from_thread(str(progress_txt))
+                                # self.display_assistant_message_from_thread(str(progress_txt))
                             
                             # Queue the command for execution
                             command_queue.put((command, args))
