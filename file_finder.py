@@ -156,6 +156,22 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None, file_e
                 print(f"Using expanded path: {potential_path}")
                 return potential_path
         
+        # Extract extension from filename if present
+        filename_extension = None
+        if filename.lower().endswith('.opd'):
+            filename_extension = 'opd'
+            # Remove extension from search term
+            filename = filename[:-4]
+        elif filename.lower().endswith('.fpd'):
+            filename_extension = 'fpd'
+            # Remove extension from search term
+            filename = filename[:-4]
+        
+        # If extension is specified in filename, override the parameter
+        if filename_extension:
+            file_extension = filename_extension
+            print(f"Using extension from filename: .{file_extension}")
+        
         # Generate alternative search patterns
         search_alternatives = generate_alternative_patterns(filename)
         print(f"Search alternatives: {search_alternatives}")
@@ -206,14 +222,38 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None, file_e
         print(f"Searching for file: {filename}")
         print(f"Search paths: {search_paths}")
         
-        # Collect all potential matches with their scores
-        matches = []
+        # First try exact matches
+        exact_matches = []
+        
+        # Determine which extensions to search for
+        extensions = [file_extension] if file_extension else ["opd", "fpd"]
+        
+        # First pass: Look for exact matches
+        for path in search_paths:
+            print(f"Looking for exact matches in: {path}")
+            
+            for ext in extensions:
+                # Try exact filename match first
+                exact_pattern = os.path.join(path, "**", f"{filename}.{ext}")
+                try:
+                    for file_path in glob.glob(exact_pattern, recursive=True):
+                        print(f"Found exact match: {file_path}")
+                        exact_matches.append((file_path, 1.0))  # Score of 1.0 for exact matches
+                except Exception as e:
+                    print(f"Error searching for exact matches in {path}: {e}")
+        
+        # If we found exact matches, return the first one
+        if exact_matches:
+            best_match = exact_matches[0][0]
+            print(f"Using exact match: {best_match}")
+            return best_match
+        
+        # If no exact matches, try fuzzy matching
+        print("No exact matches found, trying fuzzy matching...")
+        fuzzy_matches = []
         
         for path in search_paths:
             print(f"Searching in: {path}")
-            
-            # Create search patterns
-            extensions = [file_extension] if file_extension else ["opd", "fpd"]
             
             for ext in extensions:
                 # Use recursive glob to find all files with the extension
@@ -223,22 +263,22 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None, file_e
                         # Score the match
                         score = score_filename_match(filename, file_path)
                         if score > 0.3:  # Only consider reasonable matches
-                            matches.append((file_path, score))
+                            fuzzy_matches.append((file_path, score))
                 except Exception as e:
                     print(f"Error searching in {path} for .{ext} files: {e}")
         
         # Sort matches by score (highest first)
-        matches.sort(key=lambda x: x[1], reverse=True)
+        fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
         
         # Print top matches for debugging
-        print(f"Found {len(matches)} potential matches")
-        for i, (path, score) in enumerate(matches[:5]):
+        print(f"Found {len(fuzzy_matches)} potential fuzzy matches")
+        for i, (path, score) in enumerate(fuzzy_matches[:5]):
             print(f"Match {i+1}: {os.path.basename(path)} (score: {score:.2f}) - {path}")
         
         # Return the best match if any
-        if matches:
-            best_match = matches[0][0]
-            print(f"Best match: {best_match}")
+        if fuzzy_matches:
+            best_match = fuzzy_matches[0][0]
+            print(f"Best fuzzy match: {best_match}")
             return best_match
         
         print(f"No file found matching '{filename}' in any of the search paths")
