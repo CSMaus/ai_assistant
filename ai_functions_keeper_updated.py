@@ -17,6 +17,14 @@ import io
 import wave
 from prompts import command_name_extraction, commands_description, commands_names_extraction
 
+# Import the file finder module
+try:
+    from file_finder import find_file_in_system, find_directory_in_system, find_files_by_extension, get_most_recent_file
+    FILE_FINDER_AVAILABLE = True
+except ImportError:
+    print("Warning: file_finder module not available. File search functionality will be limited.")
+    FILE_FINDER_AVAILABLE = False
+
 
 # now we will use only english. Other languages will be added later
 nlp = spacy.load("en_core_web_md")
@@ -97,6 +105,8 @@ Your primary role is to provide information related to **ultrasonic testing, non
 
 Additionally, you can send commands to the software. The list of valid commands you can use is: 
 {commands_description}
+
+I can now search for files and folders on your computer to help you load data or set directories without needing the exact path.
 
 #### Strict Rules:
 - You **MUST NOT** answer questions that are unrelated to PAUT, ultrasonic testing, or NDT.
@@ -274,13 +284,13 @@ def status_message(command, args):
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
             return f"Trying to change current directory to: {dir}"
         except Exception as e:
-            print("Tried to extract file name, got exception: ", e)
+            print("Tried to extract directory name, got exception: ", e)
     elif command == "doFolderAnalysis":
         try:
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
             return f"Working on analysis of all files in: {dir}"
         except Exception as e:
-            print("Tried to extract file name, got exception: ", e)
+            print("Tried to extract directory name, got exception: ", e)
     return f"Working on it..."
     # Command: {command}.\nReceiving status about command execution will be implemented later."
 
@@ -342,7 +352,24 @@ def extract_arguments(command, user_input):
         # TODO: it works well, but need to add model warmup (first time it takes few sec to set)
         filename = extract_filename_ollama(user_input).strip()
         if filename:
-            args.append(filename)
+            # Try to find the file in the system if file_finder is available
+            if FILE_FINDER_AVAILABLE:
+                # First try to find with specific extensions
+                file_path = find_file_in_system(filename, file_extension="fpd")
+                if not file_path:
+                    file_path = find_file_in_system(filename, file_extension="opd")
+                if not file_path:
+                    # Try without extension restriction
+                    file_path = find_file_in_system(filename)
+                
+                if file_path:
+                    args.append(file_path)
+                    print(f"Found file path: {file_path}")
+                else:
+                    args.append(filename)
+                    warning_txt = f"Could not find the file '{filename}' in the system. Using the name as provided."
+            else:
+                args.append(filename)
         else:
             # old code, should be replaced with llm for correct file name extraction
             # extract fpd or opd file
@@ -352,12 +379,40 @@ def extract_arguments(command, user_input):
             # TODO: i e it can be last created file in folder, or all files in folder
             # TODO: i e it can be folder, not file itself
             if match:
-                args.append(match.group(1))
+                file_name = match.group(1)
+                if FILE_FINDER_AVAILABLE:
+                    file_path = find_file_in_system(file_name)
+                    if file_path:
+                        args.append(file_path)
+                    else:
+                        args.append(file_name)
+                else:
+                    args.append(file_name)
             else:
                 folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
                 if folder_match:
                     folder_path = folder_match.group(1)
-                    args.append(folder_path)
+                    
+                    # Try to find the folder in the system
+                    if FILE_FINDER_AVAILABLE:
+                        found_folder = find_directory_in_system(folder_path)
+                        if found_folder:
+                            folder_path = found_folder
+                            
+                            # Try to get the most recent file in the folder
+                            recent_file = get_most_recent_file(folder_path, extension="fpd")
+                            if not recent_file:
+                                recent_file = get_most_recent_file(folder_path, extension="opd")
+                            
+                            if recent_file:
+                                args.append(recent_file)
+                                print(f"Using most recent file: {recent_file}")
+                            else:
+                                args.append(folder_path)
+                        else:
+                            args.append(folder_path)
+                    else:
+                        args.append(folder_path)
 
                     # this part will be used later, but I think, I'll make it in program itself, not here
                     '''latest_file = get_latest_file_in_folder(folder_path)
@@ -371,16 +426,35 @@ def extract_arguments(command, user_input):
     elif command == "setNewDirectory":
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
-            args.extend([folder_name, False, ""])
+            # Try to find the folder in the system
+            if FILE_FINDER_AVAILABLE:
+                found_folder = find_directory_in_system(folder_name)
+                if found_folder:
+                    args.extend([found_folder, False, ""])
+                else:
+                    args.extend([folder_name, False, ""])
+                    warning_txt = f"Could not find the directory '{folder_name}' in the system. Using the name as provided."
+            else:
+                args.extend([folder_name, False, ""])
         else:
             warning_txt = "No valid folder name found to update directory."
     elif command == "doFolderAnalysis":
         # TODO: add extraction of files extension. I e maybe analyse only fpd or only opd files
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
-            args.extend([folder_name])
+            # Try to find the folder in the system
+            if FILE_FINDER_AVAILABLE:
+                found_folder = find_directory_in_system(folder_name)
+                if found_folder:
+                    args.extend([found_folder])
+                else:
+                    args.extend([folder_name])
+                    warning_txt = f"Could not find the directory '{folder_name}' in the system. Using the name as provided."
+            else:
+                args.extend([folder_name])
         else:
             warning_txt = "No valid folder name found to make analysis. \n Working with current directory"
+    return args, warning_txt
     return args, warning_txt
 
 
