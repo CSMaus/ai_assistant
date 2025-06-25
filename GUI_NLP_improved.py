@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import time
+import re
 from queue import Queue
 from threading import Thread
 
@@ -81,6 +82,10 @@ class ChatWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("AI Assistant Chat")
         self.resize(600, 500)  # Improved size
+        
+        # Track pending command suggestions
+        self.pending_command = None
+        self.pending_args = None
         
         # Initialize voice recognizer
         self.voice_recognizer = VoiceRecognizer()
@@ -320,12 +325,87 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.display_user_message(user_text)
         self.inputField.clear()
         
+        # Special handling for simple yes/no responses to pending commands
+        if self.pending_command and user_text.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "y"]:
+            # Don't show the user's message twice - we'll handle it in process_input
+            pass
+        elif self.pending_command and user_text.lower() in ["no", "nope", "n"]:
+            # Clear the pending command and acknowledge
+            self.pending_command = None
+            self.pending_args = None
+            self.display_assistant_message("Okay, I won't run that command.")
+            return
+        
         # Process the message in a separate thread
         Thread(target=self.process_input, args=(user_text,), daemon=True).start()
 
     def process_input(self, user_input):
         """Process user input using the updated functions"""
         try:
+            # Check if this is a response to a pending command suggestion
+            if self.pending_command and user_input.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "y"]:
+                print(f"User confirmed pending command: {self.pending_command}")
+                command = self.pending_command
+                args = self.pending_args
+                progress_txt = ai_functions.status_message(command, args)
+                command_queue.put((command, args))
+                self.pending_command = None
+                self.pending_args = None
+                self.display_assistant_message_from_thread(str(progress_txt))
+                return
+            elif self.pending_command:
+                # User didn't confirm, clear the pending command
+                self.pending_command = None
+                self.pending_args = None
+            
+            # Check if input is likely a question about defects before command detection
+            is_defect_question = False
+            defect_question_patterns = [
+                r"how.*find.*defect",
+                r"how.*detect.*defect",
+                r"how.*identify.*defect",
+                r"how.*understand.*defect",
+                r"what.*defect.*look like",
+                r"explain.*defect.*detection"
+            ]
+            
+            for pattern in defect_question_patterns:
+                if re.search(pattern, user_input.lower()):
+                    is_defect_question = True
+                    print("Detected as a question about defects, skipping command detection")
+                    break
+                    
+            if is_defect_question:
+                progress_txt = ai_functions.chat_with_gpt(user_input)
+                self.display_assistant_message_from_thread(str(progress_txt))
+                
+                # Suggest running defect detection
+                suggestion = "\nWould you like me to run defect detection on the current file?"
+                self.display_assistant_message_from_thread(suggestion)
+                self.pending_command = "startDefectDetection"
+                self.pending_args = []
+                return
+                
+            # Check for ambiguous cases that could be either questions or commands
+            ambiguous_patterns = {
+                "defect": "startDefectDetection",
+                "analysis": "doAnalysisSNR",
+                "snr": "doAnalysisSNR",
+                "file information": "getFileInformation",
+                "directory": "getDirectory",
+                "folder": "getDirectory"
+            }
+            
+            is_ambiguous = False
+            suggested_command = None
+            
+            for keyword, command in ambiguous_patterns.items():
+                if keyword in user_input.lower() and not user_input.strip().endswith("?"):
+                    # This could be ambiguous - not clearly a question but mentions keywords
+                    is_ambiguous = True
+                    suggested_command = command
+                    break
+            
             # Use the updated command detection logic
             commands = ai_functions.get_command_gpt(user_input)
             print(f"Commands detected: {commands}")
@@ -353,6 +433,37 @@ class ChatWindow(QtWidgets.QMainWindow):
                                       "doFolderAnalysis"]):
                             progress_txt = command
                             command_executed = True
+            
+            # If no valid command was executed but it's ambiguous, answer as question and suggest command
+            if not command_executed and is_ambiguous:
+                print(f"Ambiguous input detected, suggesting command: {suggested_command}")
+                # First answer as a question
+                answer_txt = ai_functions.chat_with_gpt(user_input)
+                self.display_assistant_message_from_thread(str(answer_txt))
+                
+                # Then suggest running a command
+                args = []
+                if suggested_command == "startDefectDetection":
+                    suggestion = "\nWould you like me to run defect detection on the current file?"
+                    self.pending_command = suggested_command
+                    self.pending_args = args
+                    self.display_assistant_message_from_thread(suggestion)
+                elif suggested_command == "doAnalysisSNR":
+                    suggestion = "\nWould you like me to run SNR analysis on the current file?"
+                    self.pending_command = suggested_command
+                    self.pending_args = args
+                    self.display_assistant_message_from_thread(suggestion)
+                elif suggested_command == "getFileInformation":
+                    suggestion = "\nWould you like me to show the file information?"
+                    self.pending_command = suggested_command
+                    self.pending_args = args
+                    self.display_assistant_message_from_thread(suggestion)
+                elif suggested_command == "getDirectory":
+                    suggestion = "\nWould you like me to show the current directory?"
+                    self.pending_command = suggested_command
+                    self.pending_args = args
+                    self.display_assistant_message_from_thread(suggestion)
+                return
             
             # If no valid command was executed, use chat_with_gpt for general conversation
             if not command_executed:

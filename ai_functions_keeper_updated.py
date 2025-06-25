@@ -76,6 +76,42 @@ def get_command_gpt(user_input):
         if client is None:
             print("OpenAI client not initialized")
             return None
+        
+        # Check for file operations first - these should take priority
+        file_operation_patterns = [
+            (r"open.*file", "loadData"),
+            (r"load.*file", "loadData"),
+            (r"open.*data", "loadData"),
+            (r"load.*data", "loadData"),
+            (r"show.*file", "loadData"),
+            (r"display.*file", "loadData"),
+            (r"\.fpd", "loadData"),
+            (r"\.opd", "loadData")
+        ]
+        
+        for pattern, command in file_operation_patterns:
+            if re.search(pattern, user_input.lower()):
+                print(f"Detected file operation pattern: {pattern}")
+                return command
+        
+        # First, check if this is likely a question rather than a command
+        is_question = False
+        if user_input.strip().endswith("?"):
+            is_question = True
+        
+        # Common question words/phrases that indicate information seeking rather than commands
+        question_indicators = ["how", "what", "why", "when", "where", "can you explain", 
+                              "tell me about", "describe", "information on", "details about"]
+        
+        for indicator in question_indicators:
+            if indicator in user_input.lower():
+                is_question = True
+                break
+        
+        # If it's clearly a question, skip command detection
+        if is_question:
+            print("Detected as a question, skipping command detection")
+            return ""
             
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -349,80 +385,82 @@ def extract_arguments(command, user_input):
     warning_txt = ""
 
     if command == "loadData":
-        # TODO: it works well, but need to add model warmup (first time it takes few sec to set)
+        # First, try to extract filename using LLM
         filename = extract_filename_ollama(user_input).strip()
-        if filename:
-            # Try to find the file in the system if file_finder is available
+        print(f"Extracted filename: '{filename}'")
+        
+        # Check if we need to look in a specific folder
+        folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
+        search_path = None
+        if folder_match:
+            folder_name = folder_match.group(1)
+            print(f"Folder mentioned: '{folder_name}'")
             if FILE_FINDER_AVAILABLE:
-                # First try to find with specific extensions
-                file_path = find_file_in_system(filename, file_extension="fpd")
-                if not file_path:
-                    file_path = find_file_in_system(filename, file_extension="opd")
-                if not file_path:
-                    # Try without extension restriction
-                    file_path = find_file_in_system(filename)
+                search_path = find_directory_in_system(folder_name)
+                print(f"Found directory: {search_path}")
+        
+        # If we have a filename, try to find it
+        if filename:
+            if FILE_FINDER_AVAILABLE:
+                # Try to find the file with the extracted name
+                if search_path:
+                    # Search in the specified folder
+                    file_path = find_file_in_system(filename, search_path=search_path)
+                else:
+                    # First try with specific extensions
+                    file_path = find_file_in_system(filename, file_extension="fpd")
+                    if not file_path:
+                        file_path = find_file_in_system(filename, file_extension="opd")
+                    if not file_path:
+                        # Try without extension restriction
+                        file_path = find_file_in_system(filename)
                 
                 if file_path:
                     args.append(file_path)
                     print(f"Found file path: {file_path}")
                 else:
+                    # If we couldn't find the file, use the name as provided
                     args.append(filename)
                     warning_txt = f"Could not find the file '{filename}' in the system. Using the name as provided."
             else:
                 args.append(filename)
         else:
-            # old code, should be replaced with llm for correct file name extraction
-            # extract fpd or opd file
+            # If LLM extraction failed, try regex
             match = re.search(r"(\b\w+\.(fpd|opd)\b)", user_input)
-
-            # TODO: remake to get some file not by name:
-            # TODO: i e it can be last created file in folder, or all files in folder
-            # TODO: i e it can be folder, not file itself
             if match:
                 file_name = match.group(1)
+                print(f"Regex found filename: {file_name}")
+                
                 if FILE_FINDER_AVAILABLE:
-                    file_path = find_file_in_system(file_name)
+                    if search_path:
+                        file_path = find_file_in_system(file_name, search_path=search_path)
+                    else:
+                        file_path = find_file_in_system(file_name)
+                    
                     if file_path:
                         args.append(file_path)
                     else:
                         args.append(file_name)
                 else:
                     args.append(file_name)
-            else:
-                folder_match = re.search(r"(?:from|in|at)\s+([\w/\\]+)", user_input)
-                if folder_match:
-                    folder_path = folder_match.group(1)
+            elif search_path:
+                # If we have a folder but no filename, try to get the most recent file
+                if FILE_FINDER_AVAILABLE:
+                    recent_file = get_most_recent_file(search_path, extension="fpd")
+                    if not recent_file:
+                        recent_file = get_most_recent_file(search_path, extension="opd")
                     
-                    # Try to find the folder in the system
-                    if FILE_FINDER_AVAILABLE:
-                        found_folder = find_directory_in_system(folder_path)
-                        if found_folder:
-                            folder_path = found_folder
-                            
-                            # Try to get the most recent file in the folder
-                            recent_file = get_most_recent_file(folder_path, extension="fpd")
-                            if not recent_file:
-                                recent_file = get_most_recent_file(folder_path, extension="opd")
-                            
-                            if recent_file:
-                                args.append(recent_file)
-                                print(f"Using most recent file: {recent_file}")
-                            else:
-                                args.append(folder_path)
-                        else:
-                            args.append(folder_path)
+                    if recent_file:
+                        args.append(recent_file)
+                        print(f"Using most recent file: {recent_file}")
                     else:
-                        args.append(folder_path)
-
-                    # this part will be used later, but I think, I'll make it in program itself, not here
-                    '''latest_file = get_latest_file_in_folder(folder_path)
-                    if latest_file:
-                        args.append(latest_file)
-                    else:
-                        args.append(folder_path)'''
-
+                        args.append(search_path)
+                        warning_txt = "No valid file found in the specified folder."
                 else:
-                    warning_txt = "No valid file or folder found to load data."
+                    args.append(search_path)
+            else:
+                warning_txt = "No valid file or folder found to load data."
+    
     elif command == "setNewDirectory":
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
@@ -438,8 +476,8 @@ def extract_arguments(command, user_input):
                 args.extend([folder_name, False, ""])
         else:
             warning_txt = "No valid folder name found to update directory."
+    
     elif command == "doFolderAnalysis":
-        # TODO: add extraction of files extension. I e maybe analyse only fpd or only opd files
         folder_name = extract_folder_ollama(user_input).strip()
         if folder_name:
             # Try to find the folder in the system
@@ -454,6 +492,8 @@ def extract_arguments(command, user_input):
                 args.extend([folder_name])
         else:
             warning_txt = "No valid folder name found to make analysis. \n Working with current directory"
+    
+    return args, warning_txt
     return args, warning_txt
     return args, warning_txt
 

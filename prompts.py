@@ -62,11 +62,29 @@ Response:
 commands_names_extraction = f"""Here is list of commands with their descriptions:
 {commands_description}
 
+IMPORTANT DISTINCTION:
+- If the user is asking you to PERFORM an action (like "run defect detection" or "open this file"), return the command name.
+- If the user is asking for INFORMATION about a topic (like "how to detect defects" or "explain defect detection"), return an empty string.
+
 If user asks you to do something which is described in the command descriptions 
 and it can be done by any of these commands or a combination of commands, return ONLY the exact command name or commands list separated by commas with nothing else!
 
-But if the user input is just conversation, a greeting, or asks you to do something else 
-and none of the commands descriptions match the user input, return only an empty string.
+But if the user input is just conversation, a greeting, asks you to do something else,
+or is asking for information/explanation rather than execution of a command,
+return only an empty string.
+
+Examples:
+User: "Run defect detection on this file"
+Response: startDefectDetection
+
+User: "How can I find defects in PAUT data?"
+Response: 
+
+User: "What's the best way to detect defects in composite materials?"
+Response: 
+
+User: "Can you analyze all files in the test folder?"
+Response: doFolderAnalysis
 
 No words. No explanations. No formatting. No extension. No symbols.
 """

@@ -21,26 +21,42 @@ def find_file_in_system(filename, search_path=None, file_extension=None):
     try:
         # Determine the search path
         if not search_path:
-            search_path = os.path.expanduser("~")  # Default to user's home directory
-        
-        # Build the find command
-        if file_extension:
-            # Search for files with specific extension
-            cmd = f"find {search_path} -type f -name '*{filename}*.{file_extension}' 2>/dev/null | head -n 1"
+            # Default to common locations in priority order
+            search_paths = [
+                os.path.join(os.path.expanduser("~"), "Documents"),
+                os.path.join(os.path.expanduser("~"), "Desktop"),
+                os.path.join(os.path.expanduser("~"), "Downloads"),
+                os.path.expanduser("~")
+            ]
         else:
-            # Search for any file containing the filename
-            cmd = f"find {search_path} -type f -name '*{filename}*' 2>/dev/null | head -n 1"
+            search_paths = [search_path]
         
-        print(f"Executing search command: {cmd}")
-        result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+        # Search in each path until we find a match
+        for path in search_paths:
+            if not os.path.isdir(path):
+                print(f"Skipping non-existent path: {path}")
+                continue
+                
+            print(f"Searching in: {path}")
+            
+            # Build the find command
+            if file_extension:
+                # Search for files with specific extension
+                cmd = f"find {path} -maxdepth 3 -type f -name '*{filename}*.{file_extension}' 2>/dev/null | head -n 1"
+            else:
+                # Search for any file containing the filename
+                cmd = f"find {path} -maxdepth 3 -type f -name '*{filename}*' 2>/dev/null | head -n 1"
+            
+            print(f"Executing search command: {cmd}")
+            result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+            
+            if result.stdout.strip():
+                file_path = result.stdout.strip()
+                print(f"Found file: {file_path}")
+                return file_path
         
-        if result.stdout.strip():
-            file_path = result.stdout.strip()
-            print(f"Found file: {file_path}")
-            return file_path
-        else:
-            print(f"No file found matching '{filename}'")
-            return None
+        print(f"No file found matching '{filename}' in any of the search paths")
+        return None
             
     except Exception as e:
         print(f"Error searching for file: {e}")
@@ -62,8 +78,26 @@ def find_directory_in_system(dirname, search_path=None):
         if not search_path:
             search_path = os.path.expanduser("~")  # Default to user's home directory
         
-        # Build the find command
-        cmd = f"find {search_path} -type d -name '*{dirname}*' 2>/dev/null | head -n 1"
+        # First, check for common user directories with exact name match (case-insensitive)
+        common_dirs = ["Documents", "Desktop", "Downloads", "Pictures", "Music", "Videos", "Movies"]
+        
+        for common_dir in common_dirs:
+            if dirname.lower() == common_dir.lower():
+                common_path = os.path.join(os.path.expanduser("~"), common_dir)
+                if os.path.isdir(common_path):
+                    print(f"Found common directory: {common_path}")
+                    return common_path
+        
+        # Next, check for direct subdirectories of home with exact name match
+        home_dir = os.path.expanduser("~")
+        for item in os.listdir(home_dir):
+            item_path = os.path.join(home_dir, item)
+            if os.path.isdir(item_path) and dirname.lower() == item.lower():
+                print(f"Found exact directory match: {item_path}")
+                return item_path
+        
+        # If no exact match, try a more limited search (only in home directory and immediate subdirectories)
+        cmd = f"find {search_path} -maxdepth 2 -type d -name '*{dirname}*' 2>/dev/null | head -n 1"
         
         print(f"Executing search command: {cmd}")
         result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
