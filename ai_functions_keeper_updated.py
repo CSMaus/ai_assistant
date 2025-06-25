@@ -61,14 +61,7 @@ client = None
 try:
     with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
         api_key = file.read().strip()
-        
-        # Check the operating system to handle platform-specific initialization
-        if platform.system() == "Windows":
-            # On Windows, don't use the proxies parameter
-            client = OpenAI(api_key=api_key)
-        else:
-            # On macOS and other systems, use the standard initialization
-            client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key)
             
         print(f"OpenAI client initialized successfully on {platform.system()}")
 except Exception as e:
