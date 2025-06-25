@@ -375,19 +375,36 @@ class ChatWindow(QtWidgets.QMainWindow):
 
 
     def command_listener(self):
+        # Keep track of commands in a sequence
+        command_sequence = []
+        
         while self.listener_active:
             try:
                 command, args = command_queue.get()
+                
+                # Add command to the sequence
+                command_sequence.append(command)
                 
                 def execute_and_display():
                     try:
                         msg, response = execute_command_gui(command, *args)
                         print(f"Command executed, response: {response[:50]}...")
-                        QtCore.QMetaObject.invokeMethod(
-                            self, "display_assistant_message",
-                            QtCore.Qt.ConnectionType.QueuedConnection,
-                            QtCore.Q_ARG(str, response)
-                        )
+                        
+                        # Only display response for commands after the first one
+                        # The first command's status message is already displayed in process_input
+                        if len(command_sequence) > 1 or command_sequence[0] != command:
+                            QtCore.QMetaObject.invokeMethod(
+                                self, "display_assistant_message",
+                                QtCore.Qt.ConnectionType.QueuedConnection,
+                                QtCore.Q_ARG(str, response)
+                            )
+                        else:
+                            print("Skipping display of first command response to avoid duplication")
+                            
+                        # Reset command sequence after all commands are processed
+                        if command_queue.empty():
+                            command_sequence.clear()
+                            
                     except Exception as e:
                         error_msg = f"Error executing command: {str(e)}"
                         print(f"Error executing command: {e}")
