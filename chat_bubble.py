@@ -47,22 +47,10 @@ class ChatBubble(QtWidgets.QWidget):
         # Create the text label - use QLabel instead of QTextEdit to avoid cursor issues
         self.text_label = QtWidgets.QLabel(self.message)
         
-        # Calculate appropriate width based on text content
-        fm = QtGui.QFontMetrics(self.text_label.font())
-        text_width = fm.horizontalAdvance(self.message.replace('<br>', ' '))
-        
-        # Always set word wrap to true for HTML content
+        # Always enable word wrap for proper text display
         self.text_label.setWordWrap(True)
         
-        # Set minimum width for short messages to prevent excessive narrowness
-        min_width = 100
-        if text_width < min_width:
-            text_width = min_width
-            
-        # Set fixed width for the text label based on content
-        if text_width < 350:  # For shorter messages
-            self.text_label.setMinimumWidth(text_width + 20)  # Add padding
-        
+        # Set text format and interaction flags
         self.text_label.setTextFormat(Qt.TextFormat.RichText)
         self.text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         
@@ -102,8 +90,7 @@ class ChatBubble(QtWidgets.QWidget):
             QtWidgets.QSizePolicy.Policy.Preferred
         )
         
-        # Set maximum width for the bubble
-        self.bubble.setMaximumWidth(400)
+        # Don't set a fixed maximum width - we'll handle this in resizeEvent
         
     def sizeHint(self):
         # Return the size hint from the bubble
@@ -113,6 +100,36 @@ class ChatBubble(QtWidgets.QWidget):
         # Handle resize events safely without touching text cursors
         super().resizeEvent(event)
         
+        # Calculate maximum bubble width based on parent widget width
+        if self.parent():
+            parent_width = self.parent().width()
+            max_width = int(parent_width * 0.85)  # 85% of parent width (increased from 70%)
+            
+            # Ensure minimum width for very small windows
+            max_width = max(300, max_width)
+            
+            # Set maximum width for the bubble
+            self.bubble.setMaximumWidth(max_width)
+            
+            # Calculate text width
+            fm = QtGui.QFontMetrics(self.text_label.font())
+            text_width = fm.horizontalAdvance(self.message.replace('<br>', ' '))
+            
+            # Add padding to text width
+            text_width_with_padding = text_width + 60  # Increased padding
+            
+            # For medium-length messages, ensure they stay on one line if possible
+            if text_width < max_width * 0.9 and text_width > 100:
+                # Set minimum width to text width plus padding, but don't exceed max_width
+                min_width = min(text_width_with_padding, max_width)
+                self.bubble.setMinimumWidth(min_width)
+            elif text_width <= 100:
+                # For very short messages, use a smaller minimum width
+                self.bubble.setMinimumWidth(text_width + 40)
+            else:
+                # For long messages, use a reasonable minimum width
+                self.bubble.setMinimumWidth(300)
+    
     # Override paintEvent to avoid any text cursor operations
     def paintEvent(self, event):
         super().paintEvent(event)

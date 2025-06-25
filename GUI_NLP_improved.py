@@ -132,7 +132,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.voice_recognizer.transcription_complete.connect(self.handle_transcribed_text)
         self.voice_recognizer.recording_status.connect(self.update_mic_status)
         self.voice_recognizer.error_occurred.connect(self.handle_voice_error)
-        self.voice_recognizer.audio_level.connect(self.update_audio_level)
+        # self.voice_recognizer.audio_level.connect(self.update_audio_level)
         
         # Setup UI
         self.setup_ui()
@@ -190,26 +190,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         # Input area
         input_layout = QtWidgets.QHBoxLayout()
         
-        # Audio level indicator
-        self.audio_level_indicator = QtWidgets.QProgressBar()
-        self.audio_level_indicator.setOrientation(QtCore.Qt.Orientation.Vertical)
-        self.audio_level_indicator.setRange(0, 100)
-        self.audio_level_indicator.setValue(0)
-        self.audio_level_indicator.setTextVisible(False)
-        self.audio_level_indicator.setFixedWidth(10)
-        self.audio_level_indicator.setStyleSheet("""
-            QProgressBar {
-                background-color: #F5FAFF;
-                border: 1px solid #B4D4FF;
-                border-radius: 5px;
-            }
-            QProgressBar::chunk {
-                background-color: #91BDF8;
-                border-radius: 5px;
-            }
-        """)
-        self.audio_level_indicator.hide()  # Hidden by default, shown during recording
-        
+
         # Text input - improved style
         self.inputField = QtWidgets.QTextEdit()
         self.inputField.setMaximumHeight(80)  # Increased height
@@ -264,7 +245,6 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.micButton.clicked.connect(self.handle_microphone_button)
 
         # Add widgets to input layout
-        input_layout.addWidget(self.audio_level_indicator)
         input_layout.addWidget(self.inputField, 1)
         input_layout.addWidget(self.sendButton)
         input_layout.addWidget(self.micButton)
@@ -358,25 +338,30 @@ class ChatWindow(QtWidgets.QMainWindow):
                     return True
         return super().eventFilter(source, event)
 
+    # @pyqtSlot(float)
+    # def update_audio_level(self, level):
+    #     """Update the audio level indicator"""
+        # self.audio_level_indicator.setValue(int(min(level, 100)))
+
     def handle_microphone_button(self):
         if self.micButton.isChecked():
             self.voice_recognizer.start_recording()
-            self.audio_level_indicator.show()
+            # self.audio_level_indicator.show()
         else:
             self.voice_recognizer.stop_recording()
-            self.audio_level_indicator.hide()
-            self.audio_level_indicator.setValue(0)
+            # self.audio_level_indicator.hide()
+            # self.audio_level_indicator.setValue(0)
 
     def update_mic_status(self, is_recording):
         if is_recording:
             self.micButton.setToolTip("Recording... Click to stop")
             self.micButton.setChecked(True)
-            self.audio_level_indicator.show()
+            # self.audio_level_indicator.show()
         else:
             self.micButton.setToolTip("Click to record voice")
             self.micButton.setChecked(False)
-            self.audio_level_indicator.hide()
-            self.audio_level_indicator.setValue(0)
+            # self.audio_level_indicator.hide()
+            # self.audio_level_indicator.setValue(0)
 
     def handle_voice_error(self, error_message):
         self.display_assistant_message(f"Voice recognition error: {error_message}")
@@ -387,9 +372,7 @@ class ChatWindow(QtWidgets.QMainWindow):
             self.inputField.setPlainText(text)
             self.send_message()
 
-    @pyqtSlot(float)
-    def update_audio_level(self, level):
-        self.audio_level_indicator.setValue(int(min(level, 100)))
+
 
     def command_listener(self):
         while self.listener_active:
