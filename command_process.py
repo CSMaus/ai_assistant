@@ -116,9 +116,20 @@ def execute_command_gui(command_name, *args):
 
         if response.status_code == 200:
             print(f"Command '{command_name}' executed successfully.")
-            print("Response:", response.json())
+            json_response = response.json()
+            print("Response:", json_response)
             fail_success_msg = f"Command '{command_name}' executed successfully."
-            response_msg = response.json()
+            
+            # Convert JSON response to string for display
+            if isinstance(json_response, dict):
+                if "Message" in json_response:
+                    response_msg = json_response["Message"]
+                elif "FolderName" in json_response:
+                    response_msg = f"Current directory: {json_response['FolderName']}"
+                else:
+                    response_msg = str(json_response)
+            else:
+                response_msg = str(json_response)
 
         else:
             print(f"Failed to execute command '{command_name}'. Status code:", response.status_code)

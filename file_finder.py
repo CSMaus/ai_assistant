@@ -190,7 +190,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
             
         current_directory = get_current_directory_from_app()
         
-        # Determine which extensions to search for
         extensions = [file_extension] if file_extension else ["opd", "fpd"]
         
         # STEP 1: First try exact matches in the current directory from the app
@@ -390,7 +389,7 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
         traceback.print_exc()
         return None
 
-def get_current_directory_from_app():
+def get_current_directory_from_app_todelete():
     """
     Get the current directory from the application using the getDirectory API.
     
@@ -420,6 +419,61 @@ def get_current_directory_from_app():
             print(f"Failed to get current directory from app. Status code: {response.status_code}")
             print(f"Response: {response.text}")
         
+        return None
+    except Exception as e:
+        print(f"Error getting current directory from app: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def get_current_directory_from_app():
+    """
+    Get the current directory from the application using the getDirectory API.
+
+    Returns:
+        The current directory path if successful, None otherwise
+    """
+    try:
+        import requests
+
+        print("Requesting current directory from app...")
+        # Call the getDirectory API
+        response = requests.get("http://localhost:5000/api/app/getDirectory?folderName=Documents")
+
+        if response.status_code == 200:
+            try:
+                # Print raw response for debugging
+                print(f"Raw response: {response.text}")
+
+                # Parse JSON carefully
+                data = response.json()
+                print(f"Parsed JSON data type: {type(data)}")
+                print(f"Parsed JSON data: {data}")
+
+                if isinstance(data, str):
+                    print(f"Using app directory (string): {data}")
+                    return data
+                elif isinstance(data, dict) and "Message" in data:
+                    print(f"Using app directory from message: {data['Message']}")
+                    return data["Message"]
+                else:
+                    print(f"Unexpected response format: {type(data)}")
+                    print(f"Response content: {data}")
+
+                    try:
+                        dir_str = str(data)
+                        print(f"Converted to string: {dir_str}")
+                        return dir_str
+                    except:
+                        print("Could not convert response to string")
+            except Exception as e:
+                print(f"Error parsing response: {e}")
+                print(f"Response text: {response.text}")
+        else:
+            print(f"Failed to get current directory from app. Status code: {response.status_code}")
+            print(f"Response: {response.text}")
+
         return None
     except Exception as e:
         print(f"Error getting current directory from app: {e}")
