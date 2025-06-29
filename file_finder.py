@@ -130,77 +130,76 @@ def score_filename_match(query: str, filename: str) -> float:
     # Return the highest score
     return max(scores) if scores else 0.0
 
-def find_file_in_system(filename: str, search_path: Optional[str] = None, file_extension: Optional[str] = None) -> Optional[str]:
+def find_file_in_system(filename: str, search_path: Optional[str] = None,
+                        file_extension: Optional[str] = None, process_callback=None) -> Optional[str]:
     """
-    Search for a file in the system using fuzzy matching.
-    
-    Args:
-        filename: The name of the file to search for (can be partial)
-        search_path: Optional path to limit the search to
-        file_extension: Optional file extension to filter by (e.g., 'fpd', 'opd')
-        
-    Returns:
-        The full path to the best matching file if found, None otherwise
-    """
+        Search for a file in the system using fuzzy matching.
+
+        Args:
+            filename: The name of the file to search for (can be partial)
+            search_path: Optional path to limit the search to
+            file_extension: Optional file extension to filter by (e.g., 'fpd', 'opd')
+            process_callback: Optional callback function to report search progress
+
+        Returns:
+            The full path to the best matching file if found, None otherwise
+        """
     try:
-        # Check if filename is already a full path
+
         if os.path.isfile(filename):
             print(f"Using provided full path: {filename}")
+            if process_callback:
+                process_callback(f"Searching for file: {filename}...")
             return filename
             
-        # Check if filename contains path separators
         if '\\' in filename or '/' in filename:
-            # This might be a full path, try to use it directly
             potential_path = os.path.expanduser(filename)
             if os.path.isfile(potential_path):
                 print(f"Using expanded path: {potential_path}")
+                if process_callback:
+                    process_callback(f"Using expanded path: {potential_path}")
                 return potential_path
-        
-        # Extract extension from filename if present
+
+        """
         filename_extension = None
         if filename.lower().endswith('.opd'):
             filename_extension = 'opd'
-            # Remove extension from search term
             filename = filename[:-4]
         elif filename.lower().endswith('.fpd'):
             filename_extension = 'fpd'
-            # Remove extension from search term
             filename = filename[:-4]
         
-        # If extension is specified in filename, override the parameter
         if filename_extension:
             file_extension = filename_extension
             print(f"Using extension from filename: .{file_extension}")
+        """
         
-        # Generate alternative search patterns
         search_alternatives = generate_alternative_patterns(filename)
         print(f"Search alternatives: {search_alternatives}")
         
-        # Determine the search paths
+        current_directory = get_current_directory_from_app()
         search_paths = []
         
+        if current_directory:
+            search_paths.append(current_directory)
+            print(f"Got current directory from app: {current_directory}")
+        
         if search_path:
-            # If a specific path is provided, use it first
             search_paths.append(os.path.expanduser(search_path))
         
-        # Add common locations to search
         home_dir = os.path.expanduser("~")
         desktop_dir = os.path.join(home_dir, "Desktop")
         documents_dir = os.path.join(home_dir, "Documents")
         
-        # Add Desktop and its subdirectories
         if os.path.exists(desktop_dir):
             search_paths.append(desktop_dir)
-            # Add "PAUT data" folder on desktop if it exists
             paut_data_dir = os.path.join(desktop_dir, "PAUT data")
             if os.path.exists(paut_data_dir):
                 search_paths.append(paut_data_dir)
-                # Look for NaWooData subfolder and other subfolders
                 for item in os.listdir(paut_data_dir):
                     item_path = os.path.join(paut_data_dir, item)
                     if os.path.isdir(item_path):
                         search_paths.append(item_path)
-                        # Also add any subfolders that might contain data files
                         try:
                             for subitem in os.listdir(item_path):
                                 subdir = os.path.join(item_path, subitem)
@@ -209,85 +208,151 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None, file_e
                         except Exception as e:
                             print(f"Error accessing directory {item_path}: {e}")
         
-        # Add Documents directory
         if os.path.exists(documents_dir):
             search_paths.append(documents_dir)
-        
-        # Add home directory as a fallback
         search_paths.append(home_dir)
-        
-        # Remove duplicates while preserving order
         search_paths = list(dict.fromkeys(search_paths))
         
         print(f"Searching for file: {filename}")
         print(f"Search paths: {search_paths}")
         
-        # First try exact matches
-        exact_matches = []
-        
-        # Determine which extensions to search for
         extensions = [file_extension] if file_extension else ["opd", "fpd"]
         
-        # First pass: Look for exact matches
-        for path in search_paths:
-            print(f"Looking for exact matches in: {path}")
+        # STEP 1: First try exact matches in the current directory (if available)
+        if current_directory:
+            print(f"STEP 1: Looking for exact matches in current directory: {current_directory}")
             
             for ext in extensions:
-                # Try exact filename match first
+                exact_path = os.path.join(current_directory, f"{filename}.{ext}")
+                if os.path.isfile(exact_path):
+                    print(f"Found exact match in current directory: {exact_path}")
+                    return exact_path
+            
+            # STEP 2: Try variations in the current directory
+            print(f"STEP 2: Looking for variations in current directory: {current_directory}")
+            
+            for ext in extensions:
+                try:
+                    for file in os.listdir(current_directory):
+                        if file.lower() == f"{filename.lower()}.{ext.lower()}":
+                            exact_path = os.path.join(current_directory, file)
+                            print(f"Found case-insensitive match in current directory: {exact_path}")
+                            return exact_path
+                except Exception as e:
+                    print(f"Error listing directory {current_directory}: {e}")
+            
+            current_dir_matches = []
+            for ext in extensions:
+                try:
+                    for file in os.listdir(current_directory):
+                        if file.lower().endswith(f".{ext.lower()}"):
+                            score = score_filename_match(filename, file)
+                            if score > 0.5:  # Higher threshold for current directory
+                                file_path = os.path.join(current_directory, file)
+                                current_dir_matches.append((file_path, score))
+                except Exception as e:
+                    print(f"Error searching in current directory: {e}")
+            
+            if current_dir_matches:
+                current_dir_matches.sort(key=lambda x: x[1], reverse=True)
+                best_match = current_dir_matches[0][0]
+                print(f"Found best match in current directory: {best_match} (score: {current_dir_matches[0][1]:.2f})")
+                return best_match
+        
+        # STEP 3: Try exact matches in all search paths
+        print("STEP 3: Looking for exact matches in all search paths")
+        exact_matches = []
+        
+        for path in search_paths:
+            if process_callback:
+                process_callback(f"Looking for exact matches in: {path}")
+            for ext in extensions:
                 exact_pattern = os.path.join(path, "**", f"{filename}.{ext}")
                 try:
                     for file_path in glob.glob(exact_pattern, recursive=True):
-                        print(f"Found exact match: {file_path}")
+                        if process_callback:
+                            process_callback(f"Found exact match: {file_path}")
                         exact_matches.append((file_path, 1.0))  # Score of 1.0 for exact matches
                 except Exception as e:
+                    if process_callback:
+                        process_callback(f"Error searching for exact matches in {path}: {e}")
                     print(f"Error searching for exact matches in {path}: {e}")
         
-        # If we found exact matches, return the first one
         if exact_matches:
             best_match = exact_matches[0][0]
+            if process_callback:
+                process_callback(f"Using exact match: {best_match}")
             print(f"Using exact match: {best_match}")
             return best_match
         
-        # If no exact matches, try fuzzy matching
-        print("No exact matches found, trying fuzzy matching...")
+        # STEP 4: If no exact matches, try fuzzy matching
+        if process_callback:
+            process_callback("STEP 4: No exact matches found, trying fuzzy matching...")
+        print("STEP 4: No exact matches found, trying fuzzy matching...")
         fuzzy_matches = []
         
         for path in search_paths:
+            if process_callback:
+                process_callback(f"Searching in: {path}")
             print(f"Searching in: {path}")
             
             for ext in extensions:
-                # Use recursive glob to find all files with the extension
                 pattern = os.path.join(path, "**", f"*.{ext}")
                 try:
                     for file_path in glob.glob(pattern, recursive=True):
-                        # Score the match
                         score = score_filename_match(filename, file_path)
                         if score > 0.3:  # Only consider reasonable matches
                             fuzzy_matches.append((file_path, score))
                 except Exception as e:
+                    if process_callback:
+                        process_callback(f"Error searching in {path} for .{ext} files: {e}")
                     print(f"Error searching in {path} for .{ext} files: {e}")
         
-        # Sort matches by score (highest first)
         fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
-        
-        # Print top matches for debugging
+
+        if process_callback:
+            process_callback(f"Found {len(fuzzy_matches)} potential fuzzy matches")
         print(f"Found {len(fuzzy_matches)} potential fuzzy matches")
         for i, (path, score) in enumerate(fuzzy_matches[:5]):
+            if process_callback:
+                process_callback(f"Match {i+1}: {os.path.basename(path)} (score: {score:.2f}) - {path}")
             print(f"Match {i+1}: {os.path.basename(path)} (score: {score:.2f}) - {path}")
         
-        # Return the best match if any
         if fuzzy_matches:
             best_match = fuzzy_matches[0][0]
+            if process_callback:
+                process_callback(f"Best fuzzy match: {best_match}")
             print(f"Best fuzzy match: {best_match}")
             return best_match
-        
+        if process_callback:
+            process_callback(f"No file found matching '{filename}' in any of the search paths")
         print(f"No file found matching '{filename}' in any of the search paths")
         return None
             
     except Exception as e:
+        if process_callback:
+            process_callback(f"Error searching for file: {e}")
         print(f"Error searching for file: {e}")
         import traceback
         traceback.print_exc()
+        return None
+
+def get_current_directory_from_app():
+
+    try:
+        import requests
+        response = requests.get("http://localhost:5000/api/app/getDirectory?folderName=Documents")
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, str):
+                return data
+            elif isinstance(data, dict) and "Message" in data:
+                return data["Message"]
+        
+        print(f"Failed to get current directory from app. Status code: {response.status_code}")
+        return None
+    except Exception as e:
+        print(f"Error getting current directory from app: {e}")
         return None
 
 def find_directory_in_system(dirname: str, search_path: Optional[str] = None) -> Optional[str]:

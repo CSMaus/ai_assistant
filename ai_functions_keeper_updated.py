@@ -544,12 +544,13 @@ def get_best_matching_commands(user_keywords, threshold=0.5, max_threshold=0.95)
     return [cmd[0] for cmd in matched_commands]
 
 
-def extract_arguments(command, user_input):
+def extract_arguments(command, user_input, process_callback=None):
     args = []
     warning_txt = ""
 
     if command == "loadData":
-        # Check for full file path in quotes
+        if process_callback:
+            process_callback("Extracting filename from input...")
         full_path_match = re.search(r'"([^"]+\.(fpd|opd))"', user_input)
         if full_path_match:
             full_path = full_path_match.group(1)
@@ -563,7 +564,6 @@ def extract_arguments(command, user_input):
                 warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
 
-        # Check for full file path without quotes
         full_path_match = re.search(r'(?:open|load)\s+file\s+([A-Za-z]:\\[^\\]+(?:\\[^\\]+)+\.(fpd|opd))', user_input)
         if full_path_match:
             full_path = full_path_match.group(1)
@@ -577,41 +577,36 @@ def extract_arguments(command, user_input):
                 warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
 
-        # First, try to extract filename using LLM
         filename = extract_filename_ollama(user_input).strip()
         print(f"Extracted filename: '{filename}'")
 
-        # Check if we need to look in a specific folder
         folder_match = re.search(r'(?:from|in|at)\s+(?:"([^"]+)"|([^\s,]+))', user_input)
         search_path = None
         if folder_match:
             folder_name = folder_match.group(1) if folder_match.group(1) else folder_match.group(2)
             print(f"Folder mentioned: '{folder_name}'")
             if FILE_FINDER_AVAILABLE:
+                if process_callback:
+                    process_callback(f"Searching for file: {filename}...")
                 search_path = find_directory_in_system(folder_name)
                 print(f"Found directory: {search_path}")
 
         # If we have a filename, try to find it
         if filename:
             if FILE_FINDER_AVAILABLE:
-                # Try to find the file with the extracted name
                 if search_path:
-                    # Search in the specified folder
-                    file_path = find_file_in_system(filename, search_path=search_path)
+                    file_path = find_file_in_system(filename, search_path=search_path, process_callback=process_callback)
                 else:
-                    # First try with specific extensions
-                    file_path = find_file_in_system(filename, file_extension="fpd")
+                    file_path = find_file_in_system(filename, file_extension="fpd", process_callback=process_callback)
                     if not file_path:
-                        file_path = find_file_in_system(filename, file_extension="opd")
+                        file_path = find_file_in_system(filename, file_extension="opd", process_callback=process_callback)
                     if not file_path:
-                        # Try without extension restriction
-                        file_path = find_file_in_system(filename)
+                        file_path = find_file_in_system(filename, process_callback=process_callback)
 
                 if file_path:
                     args.append(file_path)
                     print(f"Found file path: {file_path}")
                 else:
-                    # If we couldn't find the file, use the name as provided
                     args.append(filename)
                     warning_txt = f"Could not find the file '{filename}' in the system. Using the name as provided."
             else:
@@ -625,9 +620,9 @@ def extract_arguments(command, user_input):
 
                 if FILE_FINDER_AVAILABLE:
                     if search_path:
-                        file_path = find_file_in_system(file_name, search_path=search_path)
+                        file_path = find_file_in_system(file_name, search_path=search_path, process_callback=process_callback)
                     else:
-                        file_path = find_file_in_system(file_name)
+                        file_path = find_file_in_system(file_name, process_callback=process_callback)
 
                     if file_path:
                         args.append(file_path)
@@ -713,8 +708,6 @@ def extract_arguments(command, user_input):
         else:
             warning_txt = "No valid folder name found to make analysis. \n Working with current directory"
 
-    return args, warning_txt
-    return args, warning_txt
     return args, warning_txt
 
 

@@ -117,6 +117,46 @@ class TextEdit(QtWidgets.QTextEdit):
 
         super().paintEvent(event)
 
+class ProcessMessageManager(QObject):
+    """
+    Manages process messages in the chat interface.
+    """
+    def __init__(self, chat_window):
+        super().__init__()
+        self.chat_window = chat_window
+        self.current_process_label = None
+        self.process_id = 0
+
+    @pyqtSlot(str)
+    def update_process_message(self, message):
+        """Update or create a process message in the chat interface"""
+        if self.current_process_label is None:
+            # Create a new process label
+            self.process_id += 1
+            self.current_process_label = QtWidgets.QLabel(message)
+            self.current_process_label.setObjectName(f"process_message_{self.process_id}")
+            self.current_process_label.setStyleSheet("""
+            QLabel {
+                    color: #555555;
+                     font-style: italic;
+                     background-color: transparent;
+                     padding: 5px;
+                 }""")
+            self.chat_window.chat_layout.addWidget(self.current_process_label)
+            self.chat_window.auto_scroll_bottom()
+        else:
+            # Update existing process label
+            self.current_process_label.setText(message)
+            self.chat_window.auto_scroll_bottom()
+
+    @pyqtSlot()
+    def clear_process_message(self):
+        """Clear the current process message"""
+        if self.current_process_label is not None:
+            self.current_process_label.deleteLater()
+            self.current_process_label = None
+
+
 class ChatWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -126,6 +166,8 @@ class ChatWindow(QtWidgets.QMainWindow):
         # Track pending command suggestions
         self.pending_command = None
         self.pending_args = None
+
+        self.process_manager = ProcessMessageManager(self)
         
         # Initialize voice recognizer
         self.voice_recognizer = VoiceRecognizer()
@@ -485,6 +527,21 @@ class ChatWindow(QtWidgets.QMainWindow):
     def process_input(self, user_input):
         """Process user input using the updated functions"""
         try:
+            # Clear any previous process messages
+            QtCore.QMetaObject.invokeMethod(
+                self.process_manager, "clear_process_message",
+                QtCore.Qt.ConnectionType.QueuedConnection
+            )
+            
+            # Define a callback for process updates
+            def update_process(message):
+                # Use QMetaObject.invokeMethod to safely update from another thread
+                QtCore.QMetaObject.invokeMethod(
+                    self.process_manager, "update_process_message",
+                    QtCore.Qt.ConnectionType.QueuedConnection,
+                    QtCore.Q_ARG(str, message)
+                )
+            
             # Check if this is a response to a pending command suggestion
             if self.pending_command and user_input.lower() in ["yes", "yeah", "yep", "sure", "ok", "okay", "y"]:
                 print(f"User confirmed pending command: {self.pending_command}")
@@ -530,6 +587,7 @@ class ChatWindow(QtWidgets.QMainWindow):
                 return
                 
             # Check for ambiguous cases that could be either questions or commands
+            # TODO: remake it for more clear - it works for english only - need for all.
             ambiguous_patterns = {
                 "defect": "startDefectDetection",
                 "analysis": "doAnalysisSNR",
@@ -558,26 +616,23 @@ class ChatWindow(QtWidgets.QMainWindow):
             
             if commands is not None and commands.strip():
                 commands = ai_functions.parse_comma_separated(commands)
-                if commands:  # Check if parse_comma_separated returned a valid list
+                if commands:
                     print("Commands list is: ", commands)
-                    
-                    # Process all commands in sequence
                     for i, command in enumerate(commands):
                         print(f"Processing command {i+1}/{len(commands)}: {command}")
                         
                         if command in ["loadData", "updatePlot", "getFileInformation", "getDirectory",
                                       "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                                       "doFolderAnalysis"]:
-                            args, warning_txt = ai_functions.extract_arguments(command, user_input)
+                            args, warning_txt = ai_functions.extract_arguments(command, user_input,
+                                                                               process_callback=update_process)
                             
-                            # For the first command, display progress message
                             if i == 0:
                                 progress_txt = ai_functions.status_message(command, args)
                                 if warning_txt:
                                     progress_txt += f"\n{warning_txt}"
                                 # self.display_assistant_message_from_thread(str(progress_txt))
                             
-                            # Queue the command for execution
                             command_queue.put((command, args))
                             command_executed = True
                             
@@ -594,11 +649,9 @@ class ChatWindow(QtWidgets.QMainWindow):
             # If no valid command was executed but it's ambiguous, answer as question and suggest command
             if not command_executed and is_ambiguous:
                 print(f"Ambiguous input detected, suggesting command: {suggested_command}")
-                # First answer as a question
                 answer_txt = ai_functions.chat_with_gpt(user_input)
                 self.display_assistant_message_from_thread(str(answer_txt))
                 
-                # Then suggest running a command
                 args = []
                 if suggested_command == "startDefectDetection":
                     suggestion = "\nWould you like me to run defect detection on the current file?"
@@ -622,25 +675,44 @@ class ChatWindow(QtWidgets.QMainWindow):
                     self.display_assistant_message_from_thread(suggestion)
                 return
             
-            # If no valid command was executed, use chat_with_gpt for general conversation
             if not command_executed:
                 print("No valid command detected, using chat_with_gpt")
                 progress_txt = ai_functions.chat_with_gpt(user_input)
                 
-            # Make sure we have a response to display
             if not progress_txt:
                 progress_txt = "I processed your request but couldn't generate a proper response. Please try again."
-                
+
+            # Clear process message when done
+            QtCore.QMetaObject.invokeMethod(
+                self.process_manager, "clear_process_message",
+                QtCore.Qt.ConnectionType.QueuedConnection
+            )
+            
             print(f"Displaying response: {progress_txt[:50]}...")
-            # Display the response - ensure it's a string
             self.display_assistant_message_from_thread(str(progress_txt))
         except Exception as e:
             error_msg = f"Error processing input: {str(e)}"
             print(f"Error processing input: {e}")
+            
+            # Try to update process message with error
+            try:
+                QtCore.QMetaObject.invokeMethod(
+                    self.process_manager, "update_process_message",
+                    QtCore.Qt.ConnectionType.QueuedConnection,
+                    QtCore.Q_ARG(str, error_msg)
+                )
+            except:
+                pass
+                
+            # Clear process message after error
+            QtCore.QMetaObject.invokeMethod(
+                self.process_manager, "clear_process_message",
+                QtCore.Qt.ConnectionType.QueuedConnection
+            )
+            
             self.display_assistant_message_from_thread(error_msg)
 
     def clear_chat(self):
-        # Clear the chat layout
         while self.chat_layout.count():
             item = self.chat_layout.takeAt(0)
             widget = item.widget()
