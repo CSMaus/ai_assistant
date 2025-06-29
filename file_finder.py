@@ -451,12 +451,16 @@ def get_current_directory_from_app():
                 print(f"Parsed JSON data type: {type(data)}")
                 print(f"Parsed JSON data: {data}")
 
-                if isinstance(data, str):
-                    print(f"Using app directory (string): {data}")
-                    return data
+                if isinstance(data, dict) and "FolderName" in data:
+                    directory = data["FolderName"]
+                    print(f"Using app directory from FolderName: {directory}")
+                    return directory
                 elif isinstance(data, dict) and "Message" in data:
                     print(f"Using app directory from message: {data['Message']}")
                     return data["Message"]
+                elif isinstance(data, str):
+                    print(f"Using app directory (string): {data}")
+                    return data
                 else:
                     print(f"Unexpected response format: {type(data)}")
                     print(f"Response content: {data}")

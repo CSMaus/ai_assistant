@@ -122,10 +122,10 @@ def execute_command_gui(command_name, *args):
             
             # Convert JSON response to string for display
             if isinstance(json_response, dict):
-                if "Message" in json_response:
-                    response_msg = json_response["Message"]
-                elif "FolderName" in json_response:
+                if "FolderName" in json_response:
                     response_msg = f"Current directory: {json_response['FolderName']}"
+                elif "Message" in json_response:
+                    response_msg = json_response["Message"]
                 else:
                     response_msg = str(json_response)
             else:
