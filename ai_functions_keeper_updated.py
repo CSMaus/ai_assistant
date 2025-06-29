@@ -473,24 +473,35 @@ def status_message(command, args):
     if command == "loadData":
         try:
             data_f = re.sub(r'[\[\]"\']', '', str(", ".join(args)))
-            return f"Trying to load datafile: {data_f}"
+            return f"Opening file: {data_f}"
         except Exception as e:
             print("Tried to extract file name, got exception: ", e)
 
     elif command == "setNewDirectory":
         try:
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
-            return f"Trying to change current directory to: {dir}"
+            return f"Changing current directory to: {dir}"
         except Exception as e:
             print("Tried to extract directory name, got exception: ", e)
     elif command == "doFolderAnalysis":
         try:
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
-            return f"Working on analysis of all files in: {dir}"
+            return f"Analyzing all files in directory: {dir}"
         except Exception as e:
             print("Tried to extract directory name, got exception: ", e)
-    return f"Working on it..."
-    # Command: {command}.\nReceiving status about command execution will be implemented later."
+    elif command == "startDefectDetection":
+        return f"Starting defect detection on the current file..."
+    elif command == "doAnalysisSNR":
+        return f"Running SNR analysis on the current file..."
+    elif command == "getFileInformation":
+        return f"Retrieving file information..."
+    elif command == "getDirectory":
+        return f"Getting current directory information..."
+    elif command == "updatePlot":
+        return f"Updating the plot display..."
+    elif command == "makeSingleFileOnly":
+        return f"Generating report for the current file..."
+    return f"Processing command: {command}..."
 
 
 def extract_folder_ollama(user_input):
@@ -555,48 +566,70 @@ def extract_arguments(command, user_input, process_callback=None):
         if full_path_match:
             full_path = full_path_match.group(1)
             print(f"Detected full path in quotes: {full_path}")
+            if process_callback:
+                process_callback(f"Checking file path: {full_path}")
             # Check if the file exists
             if os.path.isfile(full_path):
                 args.append(full_path)
                 print(f"Using full path: {full_path}")
+                if process_callback:
+                    process_callback(f"File found: {full_path}")
                 return args, warning_txt
             else:
                 warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
+                if process_callback:
+                    process_callback(f"File not found: {full_path}")
 
         full_path_match = re.search(r'(?:open|load)\s+file\s+([A-Za-z]:\\[^\\]+(?:\\[^\\]+)+\.(fpd|opd))', user_input)
         if full_path_match:
             full_path = full_path_match.group(1)
             print(f"Detected full path without quotes: {full_path}")
+            if process_callback:
+                process_callback(f"Checking file path: {full_path}")
             # Check if the file exists
             if os.path.isfile(full_path):
                 args.append(full_path)
                 print(f"Using full path: {full_path}")
+                if process_callback:
+                    process_callback(f"File found: {full_path}")
                 return args, warning_txt
             else:
                 warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
+                if process_callback:
+                    process_callback(f"File not found: {full_path}")
 
         filename = extract_filename_ollama(user_input).strip()
         print(f"Extracted filename: '{filename}'")
+        if process_callback:
+            process_callback(f"Extracted filename: '{filename}'")
 
         folder_match = re.search(r'(?:from|in|at)\s+(?:"([^"]+)"|([^\s,]+))', user_input)
         search_path = None
         if folder_match:
             folder_name = folder_match.group(1) if folder_match.group(1) else folder_match.group(2)
             print(f"Folder mentioned: '{folder_name}'")
+            if process_callback:
+                process_callback(f"Looking for folder: '{folder_name}'")
             if FILE_FINDER_AVAILABLE:
-                if process_callback:
-                    process_callback(f"Searching for file: {filename}...")
                 search_path = find_directory_in_system(folder_name)
                 print(f"Found directory: {search_path}")
+                if process_callback and search_path:
+                    process_callback(f"Found directory: {search_path}")
+                elif process_callback:
+                    process_callback(f"Directory not found: {folder_name}")
 
         # If we have a filename, try to find it
         if filename:
             if FILE_FINDER_AVAILABLE:
                 if search_path:
+                    if process_callback:
+                        process_callback(f"Searching for '{filename}' in {search_path}...")
                     file_path = find_file_in_system(filename, search_path=search_path, process_callback=process_callback)
                 else:
+                    if process_callback:
+                        process_callback(f"Searching for '{filename}.fpd'...")
                     file_path = find_file_in_system(filename, file_extension="fpd", process_callback=process_callback)
                     if not file_path:
                         file_path = find_file_in_system(filename, file_extension="opd", process_callback=process_callback)
