@@ -639,9 +639,14 @@ def extract_arguments(command, user_input, process_callback=None):
                 if file_path:
                     args.append(file_path)
                     print(f"Found file path: {file_path}")
+                    if process_callback:
+                        process_callback(f"File found: {file_path}")
                 else:
+                    # If we couldn't find the file, use the name as provided
                     args.append(filename)
                     warning_txt = f"Could not find the file '{filename}' in the system. Using the name as provided."
+                    if process_callback:
+                        process_callback(f"File not found. Using name as provided: {filename}")
             else:
                 args.append(filename)
         else:
@@ -650,36 +655,56 @@ def extract_arguments(command, user_input, process_callback=None):
             if match:
                 file_name = match.group(1)
                 print(f"Regex found filename: {file_name}")
-
+                if process_callback:
+                    process_callback(f"Found filename in text: {file_name}")
+                
                 if FILE_FINDER_AVAILABLE:
                     if search_path:
+                        if process_callback:
+                            process_callback(f"Searching for '{file_name}' in {search_path}...")
                         file_path = find_file_in_system(file_name, search_path=search_path, process_callback=process_callback)
                     else:
+                        if process_callback:
+                            process_callback(f"Searching for '{file_name}' in common locations...")
                         file_path = find_file_in_system(file_name, process_callback=process_callback)
-
+                    
                     if file_path:
                         args.append(file_path)
+                        if process_callback:
+                            process_callback(f"File found: {file_path}")
                     else:
                         args.append(file_name)
+                        if process_callback:
+                            process_callback(f"File not found. Using name as provided: {file_name}")
                 else:
                     args.append(file_name)
             elif search_path:
                 # If we have a folder but no filename, try to get the most recent file
                 if FILE_FINDER_AVAILABLE:
+                    if process_callback:
+                        process_callback(f"Looking for most recent file in {search_path}...")
                     recent_file = get_most_recent_file(search_path, extension="fpd")
                     if not recent_file:
+                        if process_callback:
+                            process_callback(f"No .fpd files found, looking for .opd files...")
                         recent_file = get_most_recent_file(search_path, extension="opd")
-
+                    
                     if recent_file:
                         args.append(recent_file)
                         print(f"Using most recent file: {recent_file}")
+                        if process_callback:
+                            process_callback(f"Using most recent file: {recent_file}")
                     else:
                         args.append(search_path)
                         warning_txt = "No valid file found in the specified folder."
+                        if process_callback:
+                            process_callback(f"No valid files found in {search_path}")
                 else:
                     args.append(search_path)
             else:
                 warning_txt = "No valid file or folder found to load data."
+                if process_callback:
+                    process_callback("No valid file or folder found to load data.")
 
     elif command == "setNewDirectory":
         # Check for full directory path in quotes
