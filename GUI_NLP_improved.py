@@ -434,14 +434,14 @@ class ChatWindow(QtWidgets.QMainWindow):
                         
                         # Only display response for commands after the first one
                         # The first command's status message is already displayed in process_input
-                        if len(command_sequence) > 1 or command_sequence[0] != command:
-                            QtCore.QMetaObject.invokeMethod(
-                                self, "display_assistant_message",
-                                QtCore.Qt.ConnectionType.QueuedConnection,
-                                QtCore.Q_ARG(str, response)
-                            )
-                        else:
-                            print("Skipping display of first command response to avoid duplication")
+                        # if len(command_sequence) > 1 or command_sequence[0] != command:
+                        QtCore.QMetaObject.invokeMethod(
+                            self, "display_assistant_message",
+                            QtCore.Qt.ConnectionType.QueuedConnection,
+                            QtCore.Q_ARG(str, response)
+                        )
+                        # else:
+                        #     print("Skipping display of first command response to avoid duplication")
                             
                         # Reset command sequence after all commands are processed
                         if command_queue.empty():
@@ -551,7 +551,8 @@ class ChatWindow(QtWidgets.QMainWindow):
                 command_queue.put((command, args))
                 self.pending_command = None
                 self.pending_args = None
-                self.display_assistant_message_from_thread(str(progress_txt))
+                # self.display_assistant_message_from_thread(str(progress_txt))
+                update_process(progress_txt)
                 return
             elif self.pending_command:
                 # User didn't confirm, clear the pending command
@@ -645,6 +646,8 @@ class ChatWindow(QtWidgets.QMainWindow):
                                       "doFolderAnalysis"]):
                             progress_txt = command
                             command_executed = True
+
+                        update_process(progress_txt)
             
             # If no valid command was executed but it's ambiguous, answer as question and suggest command
             if not command_executed and is_ambiguous:
