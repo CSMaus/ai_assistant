@@ -241,7 +241,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
                 except Exception as e:
                     print(f"Error searching in app's current directory: {e}")
             
-            # If we found matches in the current directory, return the best one
             if current_dir_matches:
                 current_dir_matches.sort(key=lambda x: x[1], reverse=True)
                 best_match = current_dir_matches[0][0]
@@ -258,19 +257,15 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
             if process_callback:
                 process_callback("Could not get current directory from app, continuing with standard search...")
         
-        # Now set up search paths for the standard search
         search_paths = []
         
-        # If a specific path was provided, use it first
         if search_path:
             search_paths.append(os.path.expanduser(search_path))
         
-        # Add common locations to search
         home_dir = os.path.expanduser("~")
         desktop_dir = os.path.join(home_dir, "Desktop")
         documents_dir = os.path.join(home_dir, "Documents")
         
-        # Add Desktop and its subdirectories
         if os.path.exists(desktop_dir):
             search_paths.append(desktop_dir)
             # Add "PAUT data" folder on desktop if it exists
@@ -291,14 +286,10 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
                         except Exception as e:
                             print(f"Error accessing directory {item_path}: {e}")
         
-        # Add Documents directory
         if os.path.exists(documents_dir):
             search_paths.append(documents_dir)
         
-        # Add home directory as a fallback
         search_paths.append(home_dir)
-        
-        # Remove duplicates while preserving order
         search_paths = list(dict.fromkeys(search_paths))
         
         print(f"STEP 4: Searching for file in standard locations: {filename}")
@@ -315,7 +306,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
                 process_callback(f"Looking for exact matches in: {path}")
             
             for ext in extensions:
-                # Try exact filename match first
                 exact_pattern = os.path.join(path, "**", f"{filename}.{ext}")
                 try:
                     for file_path in glob.glob(exact_pattern, recursive=True):
@@ -326,7 +316,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
                 except Exception as e:
                     print(f"Error searching for exact matches in {path}: {e}")
         
-        # If we found exact matches, return the first one
         if exact_matches:
             best_match = exact_matches[0][0]
             print(f"Using exact match: {best_match}")
@@ -340,7 +329,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
             process_callback("No exact matches found, trying fuzzy matching...")
             
         fuzzy_matches = []
-        
         for path in search_paths:
             print(f"Searching in: {path}")
             if process_callback:
@@ -358,10 +346,8 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
                 except Exception as e:
                     print(f"Error searching in {path} for .{ext} files: {e}")
         
-        # Sort matches by score (highest first)
         fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
         
-        # Print top matches for debugging
         print(f"Found {len(fuzzy_matches)} potential fuzzy matches")
         for i, (path, score) in enumerate(fuzzy_matches[:5]):
             print(f"Match {i+1}: {os.path.basename(path)} (score: {score:.2f}) - {path}")
@@ -385,43 +371,6 @@ def find_file_in_system(filename: str, search_path: Optional[str] = None,
         if process_callback:
             process_callback(f"Error searching for file: {e}")
         print(f"Error searching for file: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def get_current_directory_from_app_todelete():
-    """
-    Get the current directory from the application using the getDirectory API.
-    
-    Returns:
-        The current directory path if successful, None otherwise
-    """
-    try:
-        import requests
-        
-        print("Requesting current directory from app...")
-        # Call the getDirectory API
-        response = requests.get("http://localhost:5000/api/app/getDirectory?folderName=Documents")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"App returned directory data: {data}")
-            
-            if isinstance(data, str):
-                print(f"Using app directory: {data}")
-                return data
-            elif isinstance(data, dict) and "Message" in data:
-                print(f"Using app directory from message: {data['Message']}")
-                return data["Message"]
-            else:
-                print(f"Unexpected response format from app: {data}")
-        else:
-            print(f"Failed to get current directory from app. Status code: {response.status_code}")
-            print(f"Response: {response.text}")
-        
-        return None
-    except Exception as e:
-        print(f"Error getting current directory from app: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -451,29 +400,28 @@ def get_current_directory_from_app():
                 print(f"Parsed JSON data type: {type(data)}")
                 print(f"Parsed JSON data: {data}")
 
+                # First check for FolderName field - this is the actual directory path
                 if isinstance(data, dict) and "FolderName" in data:
                     directory = data["FolderName"]
                     print(f"Using app directory from FolderName: {directory}")
                     return directory
+                # Then check for Message field as fallback
                 elif isinstance(data, dict) and "Message" in data:
                     print(f"Using app directory from message: {data['Message']}")
                     return data["Message"]
+                # If it's just a string, use it directly
                 elif isinstance(data, str):
                     print(f"Using app directory (string): {data}")
                     return data
                 else:
                     print(f"Unexpected response format: {type(data)}")
                     print(f"Response content: {data}")
-
-                    try:
-                        dir_str = str(data)
-                        print(f"Converted to string: {dir_str}")
-                        return dir_str
-                    except:
-                        print("Could not convert response to string")
+                    return None
             except Exception as e:
                 print(f"Error parsing response: {e}")
                 print(f"Response text: {response.text}")
+                import traceback
+                traceback.print_exc()
         else:
             print(f"Failed to get current directory from app. Status code: {response.status_code}")
             print(f"Response: {response.text}")
