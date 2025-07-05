@@ -14,3 +14,4 @@ numpy==1.24.4
 tiktoken==0.5.2
 pyaudio==0.2.13
 sounddevice==0.4.6
+langdetect==1.0.9

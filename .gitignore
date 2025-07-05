@@ -173,3 +173,5 @@ key.txt
 GUI_2.py
 test_whisper.py
 /debug_audio
+rag_implementation_guide.md
+rag_integration_guide.md

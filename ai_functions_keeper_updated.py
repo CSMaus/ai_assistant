@@ -88,35 +88,47 @@ def get_command_gpt(user_input):
             print("OpenAI client not initialized")
             return None
         
-        # Detect language of the input
-        is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
-        is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
+        # Check if language_prompts module is available
+        try:
+            from language_prompts import prompt_manager
+            LANGUAGE_PROMPTS_AVAILABLE = True
+        except ImportError:
+            print("Warning: language_prompts module not available. Using default prompts.")
+            LANGUAGE_PROMPTS_AVAILABLE = False
         
-        print(f"Language detection - Korean: {is_korean}, Russian: {is_russian}")
+        # Use the client's language detection if available
+        if hasattr(client, 'detect_language'):
+            language_code = client.detect_language(user_input)
+            print(f"Detected language: {language_code}")
+        else:
+            # Fallback to basic detection
+            is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
+            is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
+            
+            language_code = "ko" if is_korean else "ru" if is_russian else "en"
+            print(f"Basic language detection: {language_code}")
         
-        # Check for combined operations in Korean
-        if is_korean:
-            korean_combined_operations = [
-                (r"파일.*열.*결함", "loadData,startDefectDetection"),  # Open file and search for defects
-                (r"파일.*열.*분석", "loadData,doAnalysisSNR"),         # Open file and analyze
-                (r"파일.*열.*정보", "loadData,getFileInformation"),    # Open file and show information
-                (r"결함.*보고서", "startDefectDetection,makeSingleFileOnly"),  # Defect detection and report
-                (r"분석.*보고서", "doAnalysisSNR,makeSingleFileOnly")  # Analysis and report
-            ]
-            
-            for pattern, commands in korean_combined_operations:
-                if re.search(pattern, user_input):
-                    print(f"Detected Korean combined operation pattern: {pattern}")
-                    return commands
-            
-            # Check for file operations in Korean
-            korean_file_operations = [
-                (r"파일.*열", "loadData"),      # Open file
-                (r"파일.*로드", "loadData"),    # Load file
-                (r"데이터.*열", "loadData"),    # Open data
-                (r"\.fpd", "loadData"),
-                (r"\.opd", "loadData")
-            ]
+        # Get language-specific prompt if available
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            commands_names_prompt = prompt_manager.get_prompt("commands_names_extraction", language_code)
+        else:
+            commands_names_prompt = commands_names_extraction
+        
+        # Use the client's extract_commands method with language-specific prompt
+        if hasattr(client, 'extract_commands'):
+            commands = client.extract_commands(user_input)
+        else:
+            # Fallback to direct API call
+            response = client.chat_completion(
+                user_input=user_input,
+                system_prompt=commands_names_prompt
+            )
+            commands = response.strip()
+        
+        return commands
+    except Exception as e:
+        print(f"Error in get_command_gpt: {e}")
+        return None
             
             for pattern, command in korean_file_operations:
                 if re.search(pattern, user_input):
@@ -276,7 +288,31 @@ def chat_with_gpt(user_input):
             print("OpenAI client not initialized")
             return "Sorry, I'm having trouble connecting to my knowledge base."
 
-        system_prompt = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.
+        # Check if language_prompts module is available
+        try:
+            from language_prompts import prompt_manager
+            LANGUAGE_PROMPTS_AVAILABLE = True
+        except ImportError:
+            print("Warning: language_prompts module not available. Using default prompts.")
+            LANGUAGE_PROMPTS_AVAILABLE = False
+        
+        # Use the client's language detection if available
+        if hasattr(client, 'detect_language'):
+            language_code = client.detect_language(user_input)
+            print(f"Detected language for chat: {language_code}")
+        else:
+            # Fallback to basic detection
+            is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
+            is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
+            
+            language_code = "ko" if is_korean else "ru" if is_russian else "en"
+            print(f"Basic language detection for chat: {language_code}")
+        
+        # Get language-specific prompt if available
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            system_prompt = prompt_manager.get_prompt("general_conversation_prompt", language_code)
+        else:
+            system_prompt = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.
 
 Your primary role is to provide information related to **ultrasonic testing, nondestructive testing (NDT), and PAUT data analysis**.
 
@@ -305,18 +341,26 @@ Stay within these boundaries and maintain a professional and technical tone.
         print(f"Sending request to OpenAI API with user input: {user_input[:50]}...")
 
         try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_input}
-                ],
-                max_tokens=500,
-                temperature=0.4
-            )
-
-            response_text = response.choices[0].message.content.strip()
-            response_text = response_text.strip("```")
+            # Use the client's chat_completion method with language-specific prompt
+            if hasattr(client, 'chat_completion'):
+                response_text = client.chat_completion(
+                    user_input=user_input,
+                    system_prompt=system_prompt
+                )
+            else:
+                # Fallback to direct API call
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_input}
+                    ],
+                    max_tokens=500,
+                    temperature=0.4
+                )
+                response_text = response.choices[0].message.content.strip()
+                response_text = response_text.strip("```")
+            
             print(f"Received response from OpenAI API: {response_text[:50]}...")
             return response_text
 

@@ -14,6 +14,14 @@ from command_process import execute_command_gui
 from prompts import commands_description
 from chat_bubble import ChatBubble
 
+# Import language prompt manager
+try:
+    from language_prompts import prompt_manager
+    LANGUAGE_PROMPTS_AVAILABLE = True
+except ImportError:
+    print("Warning: language_prompts module not available. Using default prompts.")
+    LANGUAGE_PROMPTS_AVAILABLE = False
+
 # Import from the updated file
 import ai_functions_keeper_updated as ai_functions
 

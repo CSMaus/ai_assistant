@@ -3,10 +3,19 @@ import json
 from typing import List, Dict, Any, Optional, Callable, Generator
 import openai
 import tiktoken
+import langdetect
+
+# Import language prompt manager
+try:
+    from language_prompts import prompt_manager
+    LANGUAGE_PROMPTS_AVAILABLE = True
+except ImportError:
+    print("Warning: language_prompts module not available. Using default prompts.")
+    LANGUAGE_PROMPTS_AVAILABLE = False
 
 class OpenAIClient:
     """
-    Enhanced OpenAI client for the AI assistant
+    Enhanced OpenAI client for the AI assistant with language detection
     """
     def __init__(self):
         # Load API key
@@ -25,6 +34,9 @@ class OpenAIClient:
         self.conversation_history = []
         self.max_history_tokens = 4000  # Limit history to avoid token limits
         
+        # Current language (default to English)
+        self.current_language = "en"
+        
         # Initialize tokenizer for token counting
         try:
             self.tokenizer = tiktoken.encoding_for_model("gpt-4")  # Use gpt-4 tokenizer
@@ -33,23 +45,64 @@ class OpenAIClient:
             # Fallback to cl100k_base tokenizer which works for most models
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
     
-    def extract_commands(self, user_input: str, commands_description: str) -> str:
+    def detect_language(self, text: str) -> str:
         """
-        Extract commands from user input using the command model
+        Detect the language of the input text
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            Language code (e.g., 'en', 'ko', 'es')
         """
         try:
-            system_prompt = f"""You are an AI assistant that **ONLY extracts command names** from user input.
+            # Use langdetect to identify the language
+            language = langdetect.detect(text)
             
-            ### **RULES:**
-            1. If the user's request **matches one of the following commands**, **return ONLY the command name** or a comma-separated list of command names with **no additional text**.
-            2. If the user's input **does NOT match any command**, **return an empty string (`""`)**. **DO NOT explain. DO NOT respond with any text. DO NOT add any formatting.**
-            3. **COMMAND LIST:**
-            {commands_description}
+            # Update current language
+            self.current_language = language
             
-            **USER INPUT:** "{user_input}"
+            return language
+        except:
+            # Default to English if detection fails
+            return "en"
+    
+    def extract_commands(self, user_input: str, commands_description: str = None) -> str:
+        """
+        Extract commands from user input using the command model
+        
+        Args:
+            user_input: User input text
+            commands_description: Optional commands description (if not provided, will use language-specific one)
             
-            **YOUR RESPONSE (ONLY command name OR empty string):**
-            """
+        Returns:
+            Extracted command name(s) or empty string
+        """
+        try:
+            # Detect language
+            language = self.detect_language(user_input)
+            
+            # Get language-specific prompt if available
+            if LANGUAGE_PROMPTS_AVAILABLE:
+                if commands_description is None:
+                    commands_description = prompt_manager.get_prompt("commands_description", language)
+                command_extraction_prompt = prompt_manager.get_prompt("command_name_extraction", language)
+                # Format the prompt with commands description
+                system_prompt = command_extraction_prompt.format(commands_description=commands_description)
+            else:
+                # Fallback to default prompt
+                system_prompt = f"""You are an AI assistant that **ONLY extracts command names** from user input.
+                
+                ### **RULES:**
+                1. If the user's request **matches one of the following commands**, **return ONLY the command name** or a comma-separated list of command names with **no additional text**.
+                2. If the user's input **does NOT match any command**, **return an empty string (`""`)**. **DO NOT explain. DO NOT respond with any text. DO NOT add any formatting.**
+                3. **COMMAND LIST:**
+                {commands_description}
+                
+                **USER INPUT:** "{user_input}"
+                
+                **YOUR RESPONSE (ONLY command name OR empty string):**
+                """
             
             response = openai.ChatCompletion.create(
                 model=self.command_model,
@@ -68,12 +121,28 @@ class OpenAIClient:
     
     def chat_completion(self, 
                        user_input: str, 
-                       system_prompt: str,
+                       system_prompt: str = None,
                        stream_handler: Optional[Callable[[str], None]] = None) -> str:
         """
-        Get chat completion with optional streaming
+        Get chat completion with optional streaming and language detection
+        
+        Args:
+            user_input: User input text
+            system_prompt: Optional system prompt (if not provided, will use language-specific one)
+            stream_handler: Optional handler for streaming responses
+            
+        Returns:
+            Generated response text
         """
         try:
+            # Detect language if not already detected
+            if not hasattr(self, 'current_language') or self.current_language == "en":
+                self.detect_language(user_input)
+            
+            # Get language-specific prompt if available and not explicitly provided
+            if system_prompt is None and LANGUAGE_PROMPTS_AVAILABLE:
+                system_prompt = prompt_manager.get_prompt("general_conversation_prompt", self.current_language)
+            
             # Add user message to history
             self.conversation_history.append({"role": "user", "content": user_input})
             
