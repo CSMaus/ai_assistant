@@ -219,7 +219,7 @@ class ChatWindow(QtWidgets.QMainWindow):
                 border-radius: 12px;
             }
         """)
-        self.language_button.setToolTip("Change Voice Recognition Language")
+        self.language_button.setToolTip("Language Settings")
         self.language_button.clicked.connect(self.show_language_menu)
         
         top_bar.addWidget(self.language_button)
@@ -342,10 +342,18 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.chat_container.setPalette(palette)
 
     def show_language_menu(self):
-        """Show the language selection menu for voice recognition"""
+        """Show the language selection menu for voice recognition and prompts"""
         menu = QtWidgets.QMenu(self)
 
-        languages = [{"name": "English", "code": "en"},
+        # Create submenu for voice recognition
+        voice_menu = menu.addMenu("Voice Recognition")
+        
+        # Create submenu for prompt language
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            prompt_menu = menu.addMenu("Prompt Language")
+        
+        languages = [
+            {"name": "English", "code": "en"},
             {"name": "한국어 (Korean)", "code": "ko"},
             {"name": "日本語 (Japanese)", "code": "ja"},
             {"name": "中文 (Chinese)", "code": "zh"},
@@ -355,12 +363,34 @@ class ChatWindow(QtWidgets.QMainWindow):
             {"name": "Русский (Russian)", "code": "ru"}
         ]
 
+        # Add voice recognition language options
         for lang in languages:
-            action = menu.addAction(lang["name"])
+            action = voice_menu.addAction(lang["name"])
             action.setCheckable(True)
             action.setChecked(self.voice_recognizer.language == lang["code"])
             action.triggered.connect(
                 lambda checked, code=lang["code"], name=lang["name"]: self.change_voice_language(code, name))
+        
+        # Add prompt language options if available
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            # Add auto-detect option
+            auto_action = prompt_menu.addAction("Auto-detect (Default)")
+            auto_action.setCheckable(True)
+            auto_action.setChecked(not hasattr(prompt_manager, 'fixed_language'))
+            auto_action.triggered.connect(lambda: self.set_prompt_language("auto"))
+            
+            prompt_menu.addSeparator()
+            
+            # Add supported languages
+            supported_langs = ["en", "ko", "ru"]  # Languages with prompt support
+            for lang in languages:
+                if lang["code"] in supported_langs:
+                    action = prompt_menu.addAction(lang["name"])
+                    action.setCheckable(True)
+                    action.setChecked(hasattr(prompt_manager, 'fixed_language') and 
+                                     prompt_manager.fixed_language == lang["code"])
+                    action.triggered.connect(
+                        lambda checked, code=lang["code"], name=lang["name"]: self.set_prompt_language(code, name))
 
         menu.exec(self.language_button.mapToGlobal(QtCore.QPoint(0, self.language_button.height())))
 
@@ -369,7 +399,28 @@ class ChatWindow(QtWidgets.QMainWindow):
         if language_code != self.voice_recognizer.language:
             self.voice_recognizer.language = language_code
             self.display_assistant_message(f"Voice recognition language changed to {language_name}.")
-            self.language_button.setToolTip(f"Voice Recognition Language: {language_name}")
+            
+    def set_prompt_language(self, language_code, language_name=None):
+        """Set the language for prompts"""
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            if language_code == "auto":
+                # Remove fixed language to enable auto-detection
+                if hasattr(prompt_manager, 'fixed_language'):
+                    delattr(prompt_manager, 'fixed_language')
+                self.display_assistant_message("Prompt language set to auto-detect")
+            else:
+                # Set fixed language to override auto-detection
+                prompt_manager.fixed_language = language_code
+                prompt_manager.current_language = language_code
+                self.display_assistant_message(f"Prompt language set to {language_name}")
+        else:
+            self.display_assistant_message("Language prompts module not available. Using default language.")
+
+    @pyqtSlot(str)
+    def update_language_indicator(self, language_name):
+        """Update the language indicator in the UI"""
+        if hasattr(self, 'language_button'):
+            self.language_button.setToolTip(f"Language Settings (Detected: {language_name})")
 
     def eventFilter(self, source, event):
         if source == self.inputField:
@@ -541,6 +592,30 @@ class ChatWindow(QtWidgets.QMainWindow):
                 QtCore.Qt.ConnectionType.QueuedConnection
             )
             
+            # Detect language if language_prompts is available
+            if LANGUAGE_PROMPTS_AVAILABLE:
+                language_code = prompt_manager.set_current_language(user_input)
+                print(f"Input language detected as: {language_code}")
+                
+                # Update language button tooltip with detected language
+                if not hasattr(prompt_manager, 'fixed_language'):
+                    language_names = {
+                        "en": "English", 
+                        "ko": "Korean", 
+                        "ru": "Russian",
+                        "ja": "Japanese",
+                        "zh": "Chinese",
+                        "es": "Spanish",
+                        "fr": "French",
+                        "de": "German"
+                    }
+                    language_name = language_names.get(language_code, language_code)
+                    QtCore.QMetaObject.invokeMethod(
+                        self, "update_language_indicator",
+                        QtCore.Qt.ConnectionType.QueuedConnection,
+                        QtCore.Q_ARG(str, language_name)
+                    )
+            
             # Define a callback for process updates
             def update_process(message):
                 # Use QMetaObject.invokeMethod to safely update from another thread
@@ -569,14 +644,46 @@ class ChatWindow(QtWidgets.QMainWindow):
             
             # Check if input is likely a question about defects before command detection
             is_defect_question = False
-            defect_question_patterns = [
-                r"how.*find.*defect",
-                r"how.*detect.*defect",
-                r"how.*identify.*defect",
-                r"how.*understand.*defect",
-                r"what.*defect.*look like",
-                r"explain.*defect.*detection"
-            ]
+            defect_question_patterns = []
+            
+            # Set language-specific defect question patterns
+            if LANGUAGE_PROMPTS_AVAILABLE:
+                current_lang = prompt_manager.current_language
+                if current_lang == "ko":
+                    defect_question_patterns = [
+                        r"어떻게.*결함.*찾",
+                        r"어떻게.*결함.*감지",
+                        r"어떻게.*결함.*식별",
+                        r"결함.*어떻게.*보이",
+                        r"결함.*감지.*설명"
+                    ]
+                elif current_lang == "ru":
+                    defect_question_patterns = [
+                        r"как.*найти.*дефект",
+                        r"как.*обнаружить.*дефект",
+                        r"как.*определить.*дефект",
+                        r"что.*дефект.*выглядит",
+                        r"объясни.*обнаружение.*дефект"
+                    ]
+                else:  # Default to English
+                    defect_question_patterns = [
+                        r"how.*find.*defect",
+                        r"how.*detect.*defect",
+                        r"how.*identify.*defect",
+                        r"how.*understand.*defect",
+                        r"what.*defect.*look like",
+                        r"explain.*defect.*detection"
+                    ]
+            else:
+                # Fallback to English patterns
+                defect_question_patterns = [
+                    r"how.*find.*defect",
+                    r"how.*detect.*defect",
+                    r"how.*identify.*defect",
+                    r"how.*understand.*defect",
+                    r"what.*defect.*look like",
+                    r"explain.*defect.*detection"
+                ]
             
             for pattern in defect_question_patterns:
                 if re.search(pattern, user_input.lower()):
@@ -588,23 +695,63 @@ class ChatWindow(QtWidgets.QMainWindow):
                 progress_txt = ai_functions.chat_with_gpt(user_input)
                 self.display_assistant_message_from_thread(str(progress_txt))
                 
-                # Suggest running defect detection
-                suggestion = "\nWould you like me to run defect detection on the current file?"
+                # Suggest running defect detection with language-appropriate text
+                if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                    suggestion = "\n현재 파일에서 결함 감지를 실행하시겠습니까?"
+                elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
+                    suggestion = "\nХотите ли вы запустить обнаружение дефектов в текущем файле?"
+                else:
+                    suggestion = "\nWould you like me to run defect detection on the current file?"
+                    
                 self.display_assistant_message_from_thread(suggestion)
                 self.pending_command = "startDefectDetection"
                 self.pending_args = []
                 return
                 
             # Check for ambiguous cases that could be either questions or commands
-            # TODO: remake it for more clear - it works for english only - need for all.
-            ambiguous_patterns = {
-                "defect": "startDefectDetection",
-                "analysis": "doAnalysisSNR",
-                "snr": "doAnalysisSNR",
-                "file information": "getFileInformation",
-                "directory": "getDirectory",
-                "folder": "getDirectory"
-            }
+            # Updated for multilingual support
+            ambiguous_patterns = {}
+            
+            # Detect language and set appropriate patterns
+            if LANGUAGE_PROMPTS_AVAILABLE:
+                current_lang = prompt_manager.current_language
+                if current_lang == "ko":
+                    ambiguous_patterns = {
+                        "결함": "startDefectDetection",
+                        "분석": "doAnalysisSNR", 
+                        "SNR": "doAnalysisSNR",
+                        "파일 정보": "getFileInformation",
+                        "디렉토리": "getDirectory",
+                        "폴더": "getDirectory"
+                    }
+                elif current_lang == "ru":
+                    ambiguous_patterns = {
+                        "дефект": "startDefectDetection",
+                        "анализ": "doAnalysisSNR",
+                        "снр": "doAnalysisSNR", 
+                        "информация": "getFileInformation",
+                        "директория": "getDirectory",
+                        "папка": "getDirectory"
+                    }
+                else:  # Default to English
+                    ambiguous_patterns = {
+                        "defect": "startDefectDetection",
+                        "analysis": "doAnalysisSNR",
+                        "snr": "doAnalysisSNR",
+                        "file information": "getFileInformation",
+                        "directory": "getDirectory",
+                        "folder": "getDirectory"
+                    }
+            else:
+                # Fallback to English patterns
+                ambiguous_patterns = {
+                    "defect": "startDefectDetection",
+                    "analysis": "doAnalysisSNR",
+                    "snr": "doAnalysisSNR",
+                    "file information": "getFileInformation",
+                    "directory": "getDirectory",
+                    "folder": "getDirectory"
+                }
             
             is_ambiguous = False
             suggested_command = None
@@ -616,8 +763,8 @@ class ChatWindow(QtWidgets.QMainWindow):
                     suggested_command = command
                     break
             
-            # Use the updated command detection logic
-            commands = ai_functions.get_command_gpt(user_input)
+            # Use the new consolidated command detection logic (with fallback to old method)
+            commands = ai_functions.get_command_gpt_consolidated(user_input)
             print(f"Commands detected: {commands}")
             
             command_executed = False
@@ -633,7 +780,7 @@ class ChatWindow(QtWidgets.QMainWindow):
                         if command in ["loadData", "updatePlot", "getFileInformation", "getDirectory",
                                       "doAnalysisSNR", "startDefectDetection", "setNewDirectory", "makeSingleFileOnly",
                                       "doFolderAnalysis"]:
-                            args, warning_txt = ai_functions.extract_arguments(command, user_input,
+                            args, warning_txt = ai_functions.extract_arguments_consolidated(command, user_input,
                                                                                process_callback=update_process)
                             
                             if i == 0:
@@ -664,23 +811,44 @@ class ChatWindow(QtWidgets.QMainWindow):
                 self.display_assistant_message_from_thread(str(answer_txt))
                 
                 args = []
+                # Generate language-appropriate suggestions
                 if suggested_command == "startDefectDetection":
-                    suggestion = "\nWould you like me to run defect detection on the current file?"
+                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                        suggestion = "\n현재 파일에서 결함 감지를 실행하시겠습니까?"
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
+                        suggestion = "\nХотите ли вы запустить обнаружение дефектов в текущем файле?"
+                    else:
+                        suggestion = "\nWould you like me to run defect detection on the current file?"
                     self.pending_command = suggested_command
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "doAnalysisSNR":
-                    suggestion = "\nWould you like me to run SNR analysis on the current file?"
+                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                        suggestion = "\n현재 파일에서 SNR 분석을 실행하시겠습니까?"
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
+                        suggestion = "\nХотите ли вы запустить анализ SNR в текущем файле?"
+                    else:
+                        suggestion = "\nWould you like me to run SNR analysis on the current file?"
                     self.pending_command = suggested_command
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "getFileInformation":
-                    suggestion = "\nWould you like me to show the file information?"
+                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                        suggestion = "\n파일 정보를 보여드릴까요?"
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
+                        suggestion = "\nХотите ли вы показать информацию о файле?"
+                    else:
+                        suggestion = "\nWould you like me to show the file information?"
                     self.pending_command = suggested_command
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "getDirectory":
-                    suggestion = "\nWould you like me to show the current directory?"
+                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                        suggestion = "\n현재 디렉토리를 보여드릴까요?"
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
+                        suggestion = "\nХотите ли вы показать текущую директорию?"
+                    else:
+                        suggestion = "\nWould you like me to show the current directory?"
                     self.pending_command = suggested_command
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)

@@ -17,6 +17,14 @@ import io
 import wave
 from prompts import command_name_extraction, commands_description, commands_names_extraction
 
+# Import language prompt manager
+try:
+    from language_prompts import prompt_manager, detect_language
+    LANGUAGE_PROMPTS_AVAILABLE = True
+except ImportError:
+    print("Warning: language_prompts module not available. Using default prompts.")
+    LANGUAGE_PROMPTS_AVAILABLE = False
+
 # Import the file finder module
 try:
     from file_finder import find_file_in_system, find_directory_in_system, find_files_by_extension, get_most_recent_file
@@ -61,18 +69,265 @@ client = None
 try:
     with open(os.path.join(os.path.dirname(__file__), 'key.txt'), 'r') as file:
         api_key = file.read().strip()
-
-        # Check the operating system to handle platform-specific initialization
-        if platform.system() == "Windows":
-            # On Windows, don't use the proxies parameter
-            client = OpenAI(api_key=api_key)
-        else:
-            # On macOS and other systems, use the standard initialization
-            client = OpenAI(api_key=api_key)
-
+        client = OpenAI(api_key=api_key)
         print(f"OpenAI client initialized successfully on {platform.system()}")
 except Exception as e:
     print(f"Error initializing OpenAI client: {e}")
+
+
+def extract_all_information_gpt(user_input):
+    """
+    Master function to extract all information from user input in a single GPT request.
+    Returns commands, arguments, and metadata in one call.
+    
+    Args:
+        user_input: User input text
+        
+    Returns:
+        dict: {
+            "commands": ["command1", "command2"],
+            "filename": "extracted_filename",
+            "folder_path": "extracted_folder_path", 
+            "language": "detected_language",
+            "intent": "execute_commands" or "chat"
+        }
+    """
+    try:
+        if client is None:
+            print("OpenAI client not initialized")
+            return None
+        
+        # Detect language using centralized function
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            language_code = prompt_manager.set_current_language(user_input)
+            print(f"Language detected for master extraction: {language_code}")
+            
+            # Get language-specific commands description
+            commands_description_text = prompt_manager.get_prompt("commands_description", language_code)
+        else:
+            # Basic language detection
+            is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
+            is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
+            language_code = "ko" if is_korean else "ru" if is_russian else "en"
+            print(f"Basic language detection: {language_code}")
+            
+            # Use default commands description
+            commands_description_text = commands_description
+
+        # Create comprehensive extraction prompt
+        master_prompt = f"""You are an AI assistant that extracts ALL information from user input in a single response.
+
+AVAILABLE COMMANDS:
+{commands_description_text}
+
+Your task is to analyze the user input and return a JSON object with the following structure:
+{{
+    "commands": ["command1", "command2"],  // Array of command names that match the user's request
+    "filename": "extracted_filename",      // Any filename mentioned (with extension)
+    "folder_path": "extracted_folder_path", // Any folder/directory path mentioned
+    "language": "{language_code}",         // Detected language code
+    "intent": "execute_commands"           // Always "execute_commands" if commands found, otherwise "chat"
+}}
+
+RULES:
+1. If user wants to perform actions described in the commands, list ALL relevant command names
+2. Extract filename with extension (.fpd, .opd) if mentioned
+3. Extract folder path if mentioned (can be full path or folder name)
+4. If no commands match, set "intent": "chat" and "commands": []
+5. Return ONLY valid JSON, no explanations or additional text
+6. If no filename/folder mentioned, use empty string ""
+
+EXAMPLES:
+
+User: "Open test.fpd file and run defect detection"
+Response: {{"commands": ["loadData", "startDefectDetection"], "filename": "test.fpd", "folder_path": "", "language": "en", "intent": "execute_commands"}}
+
+User: "Change directory to C:/Data and analyze all files"
+Response: {{"commands": ["setNewDirectory", "doFolderAnalysis"], "filename": "", "folder_path": "C:/Data", "language": "en", "intent": "execute_commands"}}
+
+User: "How does ultrasonic testing work?"
+Response: {{"commands": [], "filename": "", "folder_path": "", "language": "en", "intent": "chat"}}
+
+Now analyze this user input:
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": master_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        print(f"Master extraction response: {response_text}")
+        
+        # Parse JSON response
+        try:
+            import json
+            result = json.loads(response_text)
+            print(f"Parsed extraction result: {result}")
+            return result
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            print(f"Raw response: {response_text}")
+            # Fallback to old method if JSON parsing fails
+            return None
+            
+    except Exception as e:
+        print(f"Error in master extraction: {e}")
+        return None
+
+
+def get_command_gpt_consolidated(user_input):
+    """
+    New consolidated command extraction using the master function.
+    Falls back to old method if master extraction fails.
+    
+    Args:
+        user_input: User input text
+        
+    Returns:
+        Extracted command name(s) or empty string
+    """
+    try:
+        # Try the new consolidated approach first
+        result = extract_all_information_gpt(user_input)
+        
+        if result and result.get("intent") == "execute_commands" and result.get("commands"):
+            commands = result["commands"]
+            if isinstance(commands, list):
+                return ",".join(commands)
+            else:
+                return str(commands)
+        elif result and result.get("intent") == "chat":
+            return ""
+        else:
+            # Fallback to old method
+            print("Master extraction failed, falling back to old method")
+            return get_command_gpt(user_input)
+            
+    except Exception as e:
+        print(f"Error in consolidated command extraction: {e}")
+        # Fallback to old method
+        return get_command_gpt(user_input)
+
+
+def extract_arguments_consolidated(command, user_input, process_callback=None):
+    """
+    New consolidated argument extraction using the master function.
+    Falls back to old method if master extraction fails.
+    
+    Args:
+        command: Command name
+        user_input: User input text
+        process_callback: Optional callback for process updates
+        
+    Returns:
+        tuple: (args, warning_txt)
+    """
+    try:
+        # Try to get cached result from master extraction
+        result = extract_all_information_gpt(user_input)
+        
+        if result:
+            args = []
+            warning_txt = ""
+            
+            if command == "loadData":
+                filename = result.get("filename", "")
+                if filename:
+                    if process_callback:
+                        process_callback(f"Using extracted filename: {filename}")
+                    
+                    # Check if file exists with full path
+                    if os.path.isfile(filename):
+                        args.append(filename)
+                        print(f"Using full path: {filename}")
+                        if process_callback:
+                            process_callback(f"File found: {filename}")
+                        return args, warning_txt
+                    else:
+                        # Try to find file in system if file_finder is available
+                        if FILE_FINDER_AVAILABLE:
+                            if process_callback:
+                                process_callback(f"Searching for file: {filename}")
+                            found_file = find_file_in_system(filename)
+                            if found_file:
+                                args.append(found_file)
+                                if process_callback:
+                                    process_callback(f"File found: {found_file}")
+                                return args, warning_txt
+                        
+                        warning_txt = f"File not found: {filename}"
+                        args.append(filename)  # Use filename as provided
+                        if process_callback:
+                            process_callback(f"File not found: {filename}")
+                        return args, warning_txt
+                else:
+                    # No filename extracted, fallback to old method
+                    return extract_arguments(command, user_input, process_callback)
+                    
+            elif command in ["setNewDirectory", "doFolderAnalysis"]:
+                folder_path = result.get("folder_path", "")
+                if folder_path:
+                    if process_callback:
+                        process_callback(f"Using extracted folder: {folder_path}")
+                    
+                    # Check if directory exists
+                    if os.path.isdir(folder_path):
+                        if command == "setNewDirectory":
+                            args.extend([folder_path, False, ""])
+                        else:  # doFolderAnalysis
+                            args.append(folder_path)
+                        print(f"Using directory path: {folder_path}")
+                        if process_callback:
+                            process_callback(f"Directory found: {folder_path}")
+                        return args, warning_txt
+                    else:
+                        # Try to find directory in system if file_finder is available
+                        if FILE_FINDER_AVAILABLE:
+                            if process_callback:
+                                process_callback(f"Searching for directory: {folder_path}")
+                            found_folder = find_directory_in_system(folder_path)
+                            if found_folder:
+                                if command == "setNewDirectory":
+                                    args.extend([found_folder, False, ""])
+                                else:  # doFolderAnalysis
+                                    args.append(found_folder)
+                                if process_callback:
+                                    process_callback(f"Directory found: {found_folder}")
+                                return args, warning_txt
+                        
+                        warning_txt = f"Directory not found: {folder_path}"
+                        if command == "setNewDirectory":
+                            args.extend([folder_path, False, ""])
+                        else:  # doFolderAnalysis
+                            args.append(folder_path)
+                        if process_callback:
+                            process_callback(f"Directory not found: {folder_path}")
+                        return args, warning_txt
+                else:
+                    # No folder path extracted, fallback to old method
+                    return extract_arguments(command, user_input, process_callback)
+            else:
+                # For other commands that don't need file/folder arguments
+                return [], ""
+        else:
+            # Master extraction failed, fallback to old method
+            return extract_arguments(command, user_input, process_callback)
+            
+    except Exception as e:
+        print(f"Error in consolidated argument extraction: {e}")
+        # Fallback to old method
+        return extract_arguments(command, user_input, process_callback)
+
+
+    command = command.strip()
+    if re.fullmatch(r'\s*[a-zA-Z]+(?:\s*,\s*[a-zA-Z]+)*\s*', command):
+        return [word.strip() for word in command.split(',')]
+    return None
 
 
 def parse_comma_separated(command):
@@ -82,169 +337,73 @@ def parse_comma_separated(command):
     return None
 
 
+# Keep the original functions intact for fallback and your future modifications
 def get_command_gpt(user_input):
+    """
+    Extract commands from user input using language-specific prompts
+    
+    Args:
+        user_input: User input text
+        
+    Returns:
+        Extracted command name(s) or empty string
+    """
     try:
         if client is None:
             print("OpenAI client not initialized")
             return None
         
-        # Check if language_prompts module is available
-        try:
-            from language_prompts import prompt_manager
-            LANGUAGE_PROMPTS_AVAILABLE = True
-        except ImportError:
-            print("Warning: language_prompts module not available. Using default prompts.")
-            LANGUAGE_PROMPTS_AVAILABLE = False
-        
-        # Use the client's language detection if available
-        if hasattr(client, 'detect_language'):
-            language_code = client.detect_language(user_input)
-            print(f"Detected language: {language_code}")
+        # Detect language using centralized function
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            language_code = prompt_manager.set_current_language(user_input)
+            print(f"Language detected for command extraction: {language_code}")
+            
+            # Get language-specific prompt
+            commands_names_prompt = prompt_manager.get_prompt("commands_names_extraction", language_code)
+            print(f"Using {language_code} prompt for command extraction")
         else:
-            # Fallback to basic detection
+            # Basic language detection
             is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
             is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
-            
             language_code = "ko" if is_korean else "ru" if is_russian else "en"
             print(f"Basic language detection: {language_code}")
-        
-        # Get language-specific prompt if available
-        if LANGUAGE_PROMPTS_AVAILABLE:
-            commands_names_prompt = prompt_manager.get_prompt("commands_names_extraction", language_code)
-        else:
+            
+            # Use default prompt
             commands_names_prompt = commands_names_extraction
         
-        # Use the client's extract_commands method with language-specific prompt
+        # Use the client's extract_commands method if available
         if hasattr(client, 'extract_commands'):
             commands = client.extract_commands(user_input)
+            print(f"Commands extracted via client: {commands}")
+            return commands
         else:
             # Fallback to direct API call
-            response = client.chat_completion(
-                user_input=user_input,
-                system_prompt=commands_names_prompt
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": commands_names_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                temperature=0
             )
-            commands = response.strip()
-        
-        return commands
+            commands = response.choices[0].message.content.strip()
+            print(f"Commands extracted via direct API: {commands}")
+            return commands
     except Exception as e:
         print(f"Error in get_command_gpt: {e}")
         return None
-            
-            for pattern, command in korean_file_operations:
-                if re.search(pattern, user_input):
-                    print(f"Detected Korean file operation pattern: {pattern}")
-                    
-                    # Check if there's also a defect detection request in Korean
-                    if re.search(r"결함|검색|탐지", user_input):
-                        print("Also detected Korean defect detection request")
-                        return "loadData,startDefectDetection"
-                    
-                    # Check if there's also an analysis request in Korean
-                    if re.search(r"분석|SNR|신호", user_input):
-                        print("Also detected Korean analysis request")
-                        return "loadData,doAnalysisSNR"
-                    
-                    # Check if there's also an information request in Korean
-                    if re.search(r"정보|상세|메타데이터", user_input):
-                        print("Also detected Korean information request")
-                        return "loadData,getFileInformation"
-                    
-                    return command
-        
-        # Check for combined operations in Russian
-        if is_russian:
-            russian_combined_operations = [
-                (r"файл.*откр.*дефект", "loadData,startDefectDetection"),  # Open file and search for defects
-                (r"файл.*откр.*анализ", "loadData,doAnalysisSNR"),         # Open file and analyze
-                (r"файл.*откр.*информац", "loadData,getFileInformation"),   # Open file and show information
-                (r"дефект.*отчет", "startDefectDetection,makeSingleFileOnly"),  # Defect detection and report
-                (r"анализ.*отчет", "doAnalysisSNR,makeSingleFileOnly")      # Analysis and report
-            ]
-            
-            for pattern, commands in russian_combined_operations:
-                if re.search(pattern, user_input.lower()):
-                    print(f"Detected Russian combined operation pattern: {pattern}")
-                    return commands
-            
-            # Check for file operations in Russian
-            russian_file_operations = [
-                (r"файл.*откр", "loadData"),    # Open file
-                (r"загруз.*файл", "loadData"),  # Load file
-                (r"данны.*откр", "loadData"),   # Open data
-                (r"\.fpd", "loadData"),
-                (r"\.opd", "loadData")
-            ]
-            
-            for pattern, command in russian_file_operations:
-                if re.search(pattern, user_input.lower()):
-                    print(f"Detected Russian file operation pattern: {pattern}")
-                    
-                    # Check if there's also a defect detection request in Russian
-                    if re.search(r"дефект|поиск|обнаруж", user_input.lower()):
-                        print("Also detected Russian defect detection request")
-                        return "loadData,startDefectDetection"
-                    
-                    # Check if there's also an analysis request in Russian
-                    if re.search(r"анализ|снр|сигнал", user_input.lower()):
-                        print("Also detected Russian analysis request")
-                        return "loadData,doAnalysisSNR"
-                    
-                    # Check if there's also an information request in Russian
-                    if re.search(r"информац|детал|метадан", user_input.lower()):
-                        print("Also detected Russian information request")
-                        return "loadData,getFileInformation"
-                    
-                    return command
-        
-        # Check for combined operations like "open file and find defects" (English)
-        combined_operations = [
-            (r"open.*(?:and|then).*defect", "loadData,startDefectDetection"),
-            (r"load.*(?:and|then).*defect", "loadData,startDefectDetection"),
-            (r"open.*(?:and|then).*analysis", "loadData,doAnalysisSNR"),
-            (r"load.*(?:and|then).*analysis", "loadData,doAnalysisSNR"),
-            (r"open.*(?:and|then).*information", "loadData,getFileInformation"),
-            (r"load.*(?:and|then).*information", "loadData,getFileInformation"),
-            (r"defect.*(?:and|then).*report", "startDefectDetection,makeSingleFileOnly"),
-            (r"analysis.*(?:and|then).*report", "doAnalysisSNR,makeSingleFileOnly")
-        ]
-        
-        for pattern, commands in combined_operations:
-            if re.search(pattern, user_input.lower()):
-                print(f"Detected combined operation pattern: {pattern}")
-                return commands
-        
-        # Check for file operations first - these should take priority
-        file_operation_patterns = [
-            (r"open.*file", "loadData"),
-            (r"load.*file", "loadData"),
-            (r"open.*data", "loadData"),
-            (r"load.*data", "loadData"),
-            (r"show.*file", "loadData"),
-            (r"display.*file", "loadData"),
-            (r"\.fpd", "loadData"),
-            (r"\.opd", "loadData")
-        ]
-        
-        for pattern, command in file_operation_patterns:
-            if re.search(pattern, user_input.lower()):
-                print(f"Detected file operation pattern: {pattern}")
-                
-                # Check if there's also a defect detection request
-                if re.search(r"defect|flaw|detect", user_input.lower()):
-                    print("Also detected defect detection request")
-                    return "loadData,startDefectDetection"
-                
-                # Check if there's also an analysis request
-                if re.search(r"analysis|analyze|snr", user_input.lower()):
-                    print("Also detected analysis request")
-                    return "loadData,doAnalysisSNR"
-                
-                # Check if there's also an information request
-                if re.search(r"information|details|metadata", user_input.lower()):
-                    print("Also detected information request")
-                    return "loadData,getFileInformation"
-                
-                return command
+
+
+def get_command_gpt_old_patterns(user_input):
+    """
+    OLD FUNCTION - Extract commands using pattern matching (kept for fallback)
+    This function uses the old pattern matching approach and should only be used
+    if the new language-specific prompt system fails.
+    """
+    try:
+        if client is None:
+            print("OpenAI client not initialized")
+            return None
 
         # First, check if this is likely a question rather than a command
         is_question = False
@@ -283,35 +442,36 @@ def get_command_gpt(user_input):
 
 
 def chat_with_gpt(user_input):
+    """
+    Generate a response to user input using language-specific prompts
+    
+    Args:
+        user_input: User input text
+        
+    Returns:
+        Generated response text
+    """
     try:
         if client is None:
             print("OpenAI client not initialized")
             return "Sorry, I'm having trouble connecting to my knowledge base."
 
-        # Check if language_prompts module is available
-        try:
-            from language_prompts import prompt_manager
-            LANGUAGE_PROMPTS_AVAILABLE = True
-        except ImportError:
-            print("Warning: language_prompts module not available. Using default prompts.")
-            LANGUAGE_PROMPTS_AVAILABLE = False
-        
-        # Use the client's language detection if available
-        if hasattr(client, 'detect_language'):
-            language_code = client.detect_language(user_input)
-            print(f"Detected language for chat: {language_code}")
+        # Detect language using centralized function
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            language_code = prompt_manager.set_current_language(user_input)
+            print(f"Language detected for chat: {language_code}")
+            
+            # Get language-specific prompt
+            system_prompt = prompt_manager.get_prompt("general_conversation_prompt", language_code)
+            print(f"Using {language_code} prompt for conversation")
         else:
-            # Fallback to basic detection
+            # Basic language detection
             is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_input)
             is_russian = any('\u0400' <= char <= '\u04FF' for char in user_input)
-            
             language_code = "ko" if is_korean else "ru" if is_russian else "en"
             print(f"Basic language detection for chat: {language_code}")
-        
-        # Get language-specific prompt if available
-        if LANGUAGE_PROMPTS_AVAILABLE:
-            system_prompt = prompt_manager.get_prompt("general_conversation_prompt", language_code)
-        else:
+            
+            # Use default prompt
             system_prompt = f"""You are an AI assistant designed specifically to assist with software that processes Phased Array Ultrasonic Testing (PAUT) data.
 
 Your primary role is to provide information related to **ultrasonic testing, nondestructive testing (NDT), and PAUT data analysis**.
@@ -341,25 +501,18 @@ Stay within these boundaries and maintain a professional and technical tone.
         print(f"Sending request to OpenAI API with user input: {user_input[:50]}...")
 
         try:
-            # Use the client's chat_completion method with language-specific prompt
-            if hasattr(client, 'chat_completion'):
-                response_text = client.chat_completion(
-                    user_input=user_input,
-                    system_prompt=system_prompt
-                )
-            else:
-                # Fallback to direct API call
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_input}
-                    ],
-                    max_tokens=500,
-                    temperature=0.4
-                )
-                response_text = response.choices[0].message.content.strip()
-                response_text = response_text.strip("```")
+            # Use direct API call with the basic OpenAI client
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                max_tokens=500,
+                temperature=0.4
+            )
+            response_text = response.choices[0].message.content.strip()
+            response_text = response_text.strip("```")
             
             print(f"Received response from OpenAI API: {response_text[:50]}...")
             return response_text
@@ -549,25 +702,67 @@ def status_message(command, args):
 
 
 def extract_folder_ollama(user_input):
-    system_prompt = "Extract full folder path with folder name from the input. Return only the folder path. No extra words. No explanations. No formatting."
-    response = ollama.generate(
-        model="mistral",
-        prompt=f"{system_prompt}\n\n{user_input}",
-        options={"temperature": 0}
-    )
-    print(response)
-    return response['response'].strip()
+    """
+    Extract folder path from user input using language-specific prompts
+    """
+    # Detect language and get appropriate prompt
+    if LANGUAGE_PROMPTS_AVAILABLE:
+        language_code = prompt_manager.set_current_language(user_input)
+        system_prompt = prompt_manager.get_prompt("folder_path_extraction_prompt", language_code)
+        print(f"Using {language_code} prompt for folder extraction")
+    else:
+        # Fallback to English prompt
+        system_prompt = "Extract full folder path with folder name from the input. Return only the folder path. No extra words. No explanations. No formatting."
+    
+    try:
+        response = ollama.generate(
+            model="mistral",
+            prompt=f"{system_prompt}\n\n{user_input}",
+            options={"temperature": 0}
+        )
+        print(f"Ollama folder extraction response: {response}")
+        return response['response'].strip()
+    except Exception as e:
+        print(f"Error in ollama folder extraction: {e}")
+        # Fallback to simple regex extraction
+        folder_match = re.search(r'([A-Za-z]:\\[^\\]+(?:\\[^\\]+)*)', user_input)
+        if folder_match:
+            return folder_match.group(1)
+        # Try to extract folder name without full path
+        folder_name_match = re.search(r'(?:folder|directory|dir)\s+([a-zA-Z0-9_\s-]+)', user_input, re.IGNORECASE)
+        if folder_name_match:
+            return folder_name_match.group(1).strip()
+        return ""
 
 
 def extract_filename_ollama(user_input):
-    system_prompt = "Extract only the file name from the input. Return only the file name. No extra words. No explanations. No formatting."
-    response = ollama.generate(
-        model="mistral",
-        prompt=f"{system_prompt}\n\n{user_input}",
-        options={"temperature": 0}
-    )
-    print(response)
-    return response['response'].strip()
+    """
+    Extract filename from user input using language-specific prompts
+    """
+    # Detect language and get appropriate prompt
+    if LANGUAGE_PROMPTS_AVAILABLE:
+        language_code = prompt_manager.set_current_language(user_input)
+        system_prompt = prompt_manager.get_prompt("file_path_extraction_prompt", language_code)
+        print(f"Using {language_code} prompt for filename extraction")
+    else:
+        # Fallback to English prompt
+        system_prompt = "Extract only the file name from the input. Return only the file name. No extra words. No explanations. No formatting."
+    
+    try:
+        response = ollama.generate(
+            model="mistral",
+            prompt=f"{system_prompt}\n\n{user_input}",
+            options={"temperature": 0}
+        )
+        print(f"Ollama filename extraction response: {response}")
+        return response['response'].strip()
+    except Exception as e:
+        print(f"Error in ollama filename extraction: {e}")
+        # Fallback to simple regex extraction
+        filename_match = re.search(r'([a-zA-Z0-9_.-]+\.(fpd|opd))', user_input)
+        if filename_match:
+            return filename_match.group(1)
+        return ""
 
 
 # llama3

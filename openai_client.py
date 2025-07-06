@@ -3,11 +3,10 @@ import json
 from typing import List, Dict, Any, Optional, Callable, Generator
 import openai
 import tiktoken
-import langdetect
 
 # Import language prompt manager
 try:
-    from language_prompts import prompt_manager
+    from language_prompts import prompt_manager, detect_language
     LANGUAGE_PROMPTS_AVAILABLE = True
 except ImportError:
     print("Warning: language_prompts module not available. Using default prompts.")
@@ -47,7 +46,7 @@ class OpenAIClient:
     
     def detect_language(self, text: str) -> str:
         """
-        Detect the language of the input text
+        Detect the language of the input text and update current_language
         
         Args:
             text: Input text
@@ -55,17 +54,22 @@ class OpenAIClient:
         Returns:
             Language code (e.g., 'en', 'ko', 'es')
         """
-        try:
-            # Use langdetect to identify the language
-            language = langdetect.detect(text)
-            
-            # Update current language
-            self.current_language = language
-            
-            return language
-        except:
-            # Default to English if detection fails
-            return "en"
+        if LANGUAGE_PROMPTS_AVAILABLE:
+            # Use the centralized language detection and update prompt manager
+            self.current_language = prompt_manager.set_current_language(text)
+        else:
+            # Fallback to direct detection
+            try:
+                self.current_language = detect_language(text)
+            except:
+                # If detect_language is not available, use basic detection
+                is_korean = any('\uac00' <= char <= '\ud7a3' for char in text)
+                is_russian = any('\u0400' <= char <= '\u04FF' for char in text)
+                
+                self.current_language = "ko" if is_korean else "ru" if is_russian else "en"
+        
+        print(f"Language detected: {self.current_language}")
+        return self.current_language
     
     def extract_commands(self, user_input: str, commands_description: str = None) -> str:
         """
@@ -79,16 +83,20 @@ class OpenAIClient:
             Extracted command name(s) or empty string
         """
         try:
-            # Detect language
-            language = self.detect_language(user_input)
+            # Detect language and update current_language
+            language_code = self.detect_language(user_input)
             
             # Get language-specific prompt if available
             if LANGUAGE_PROMPTS_AVAILABLE:
                 if commands_description is None:
-                    commands_description = prompt_manager.get_prompt("commands_description", language)
-                command_extraction_prompt = prompt_manager.get_prompt("command_name_extraction", language)
+                    commands_description = prompt_manager.get_prompt("commands_description", language_code)
+                
+                # Get the command extraction prompt for the detected language
+                command_extraction_prompt = prompt_manager.get_prompt("command_name_extraction", language_code)
+                
                 # Format the prompt with commands description
                 system_prompt = command_extraction_prompt.format(commands_description=commands_description)
+                print(f"Using {language_code} prompt for command extraction")
             else:
                 # Fallback to default prompt
                 system_prompt = f"""You are an AI assistant that **ONLY extracts command names** from user input.
@@ -135,13 +143,13 @@ class OpenAIClient:
             Generated response text
         """
         try:
-            # Detect language if not already detected
-            if not hasattr(self, 'current_language') or self.current_language == "en":
-                self.detect_language(user_input)
+            # Detect language if not already done for this input
+            language_code = self.detect_language(user_input)
             
             # Get language-specific prompt if available and not explicitly provided
             if system_prompt is None and LANGUAGE_PROMPTS_AVAILABLE:
-                system_prompt = prompt_manager.get_prompt("general_conversation_prompt", self.current_language)
+                system_prompt = prompt_manager.get_prompt("general_conversation_prompt", language_code)
+                print(f"Using {language_code} prompt for conversation")
             
             # Add user message to history
             self.conversation_history.append({"role": "user", "content": user_input})
