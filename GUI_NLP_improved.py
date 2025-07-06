@@ -14,13 +14,21 @@ from command_process import execute_command_gui
 from prompts import commands_description
 from chat_bubble import ChatBubble
 
-# Import language prompt manager
+# Import localization manager instead of language_prompts
 try:
-    from language_prompts import prompt_manager
-    LANGUAGE_PROMPTS_AVAILABLE = True
+    from localization_manager import localization_manager, detect_language, set_current_language
+    LOCALIZATION_AVAILABLE = True
+    LANGUAGE_PROMPTS_AVAILABLE = True  # For backward compatibility
 except ImportError:
-    print("Warning: language_prompts module not available. Using default prompts.")
-    LANGUAGE_PROMPTS_AVAILABLE = False
+    print("Warning: localization_manager module not available. Trying fallback...")
+    LOCALIZATION_AVAILABLE = False
+    # Fallback to old system
+    try:
+        from language_prompts import prompt_manager
+        LANGUAGE_PROMPTS_AVAILABLE = True
+    except ImportError:
+        print("Warning: language_prompts module not available. Using default prompts.")
+        LANGUAGE_PROMPTS_AVAILABLE = False
 
 # Import from the updated file
 import ai_functions_keeper_updated as ai_functions
@@ -592,8 +600,29 @@ class ChatWindow(QtWidgets.QMainWindow):
                 QtCore.Qt.ConnectionType.QueuedConnection
             )
             
-            # Detect language if language_prompts is available
-            if LANGUAGE_PROMPTS_AVAILABLE:
+            # Detect language if localization is available
+            if LOCALIZATION_AVAILABLE:
+                language_code = set_current_language(user_input)
+                print(f"Input language detected as: {language_code}")
+                
+                # Update language button tooltip with detected language
+                language_names = {
+                    "en": "English", 
+                    "ko": "Korean", 
+                    "ru": "Russian",
+                    "ja": "Japanese",
+                    "zh": "Chinese",
+                    "es": "Spanish",
+                    "fr": "French",
+                    "de": "German"
+                }
+                language_name = language_names.get(language_code, language_code)
+                QtCore.QMetaObject.invokeMethod(
+                    self, "update_language_indicator",
+                    QtCore.Qt.ConnectionType.QueuedConnection,
+                    QtCore.Q_ARG(str, language_name)
+                )
+            elif LANGUAGE_PROMPTS_AVAILABLE:
                 language_code = prompt_manager.set_current_language(user_input)
                 print(f"Input language detected as: {language_code}")
                 
@@ -647,7 +676,34 @@ class ChatWindow(QtWidgets.QMainWindow):
             defect_question_patterns = []
             
             # Set language-specific defect question patterns
-            if LANGUAGE_PROMPTS_AVAILABLE:
+            if LOCALIZATION_AVAILABLE:
+                current_lang = localization_manager.current_language
+                if current_lang == "ko":
+                    defect_question_patterns = [
+                        r"어떻게.*결함.*찾",
+                        r"어떻게.*결함.*감지",
+                        r"어떻게.*결함.*식별",
+                        r"결함.*어떻게.*보이",
+                        r"결함.*감지.*설명"
+                    ]
+                elif current_lang == "ru":
+                    defect_question_patterns = [
+                        r"как.*найти.*дефект",
+                        r"как.*обнаружить.*дефект",
+                        r"как.*определить.*дефект",
+                        r"что.*дефект.*выглядит",
+                        r"объясни.*обнаружение.*дефект"
+                    ]
+                else:  # Default to English
+                    defect_question_patterns = [
+                        r"how.*find.*defect",
+                        r"how.*detect.*defect",
+                        r"how.*identify.*defect",
+                        r"how.*understand.*defect",
+                        r"what.*defect.*look like",
+                        r"explain.*defect.*detection"
+                    ]
+            elif LANGUAGE_PROMPTS_AVAILABLE:
                 current_lang = prompt_manager.current_language
                 if current_lang == "ko":
                     defect_question_patterns = [
@@ -695,8 +751,10 @@ class ChatWindow(QtWidgets.QMainWindow):
                 progress_txt = ai_functions.chat_with_gpt(user_input)
                 self.display_assistant_message_from_thread(str(progress_txt))
                 
-                # Suggest running defect detection with language-appropriate text
-                if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                # Suggest running defect detection with localized text
+                if LOCALIZATION_AVAILABLE:
+                    suggestion = "\n" + localization_manager.get_suggestion("run_defect_detection")
+                elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
                     suggestion = "\n현재 파일에서 결함 감지를 실행하시겠습니까?"
                 elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
                     suggestion = "\nХотите ли вы запустить обнаружение дефектов в текущем файле?"
@@ -709,11 +767,40 @@ class ChatWindow(QtWidgets.QMainWindow):
                 return
                 
             # Check for ambiguous cases that could be either questions or commands
-            # Updated for multilingual support
+            # Updated for multilingual support using localization
             ambiguous_patterns = {}
             
             # Detect language and set appropriate patterns
-            if LANGUAGE_PROMPTS_AVAILABLE:
+            if LOCALIZATION_AVAILABLE:
+                current_lang = localization_manager.current_language
+                if current_lang == "ko":
+                    ambiguous_patterns = {
+                        "결함": "startDefectDetection",
+                        "분석": "doAnalysisSNR", 
+                        "SNR": "doAnalysisSNR",
+                        "파일 정보": "getFileInformation",
+                        "디렉토리": "getDirectory",
+                        "폴더": "getDirectory"
+                    }
+                elif current_lang == "ru":
+                    ambiguous_patterns = {
+                        "дефект": "startDefectDetection",
+                        "анализ": "doAnalysisSNR",
+                        "снр": "doAnalysisSNR", 
+                        "информация": "getFileInformation",
+                        "директория": "getDirectory",
+                        "папка": "getDirectory"
+                    }
+                else:  # Default to English
+                    ambiguous_patterns = {
+                        "defect": "startDefectDetection",
+                        "analysis": "doAnalysisSNR",
+                        "snr": "doAnalysisSNR",
+                        "file information": "getFileInformation",
+                        "directory": "getDirectory",
+                        "folder": "getDirectory"
+                    }
+            elif LANGUAGE_PROMPTS_AVAILABLE:
                 current_lang = prompt_manager.current_language
                 if current_lang == "ko":
                     ambiguous_patterns = {
@@ -823,7 +910,9 @@ class ChatWindow(QtWidgets.QMainWindow):
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "doAnalysisSNR":
-                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                    if LOCALIZATION_AVAILABLE:
+                        suggestion = "\n" + localization_manager.get_suggestion("run_snr_analysis")
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
                         suggestion = "\n현재 파일에서 SNR 분석을 실행하시겠습니까?"
                     elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
                         suggestion = "\nХотите ли вы запустить анализ SNR в текущем файле?"
@@ -833,7 +922,9 @@ class ChatWindow(QtWidgets.QMainWindow):
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "getFileInformation":
-                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                    if LOCALIZATION_AVAILABLE:
+                        suggestion = "\n" + localization_manager.get_suggestion("show_file_info")
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
                         suggestion = "\n파일 정보를 보여드릴까요?"
                     elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
                         suggestion = "\nХотите ли вы показать информацию о файле?"
@@ -843,7 +934,9 @@ class ChatWindow(QtWidgets.QMainWindow):
                     self.pending_args = args
                     self.display_assistant_message_from_thread(suggestion)
                 elif suggested_command == "getDirectory":
-                    if LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
+                    if LOCALIZATION_AVAILABLE:
+                        suggestion = "\n" + localization_manager.get_suggestion("show_directory")
+                    elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ko":
                         suggestion = "\n현재 디렉토리를 보여드릴까요?"
                     elif LANGUAGE_PROMPTS_AVAILABLE and prompt_manager.current_language == "ru":
                         suggestion = "\nХотите ли вы показать текущую директорию?"
@@ -859,7 +952,10 @@ class ChatWindow(QtWidgets.QMainWindow):
                 progress_txt = ai_functions.chat_with_gpt(user_input)
                 
             if not progress_txt:
-                progress_txt = "I processed your request but couldn't generate a proper response. Please try again."
+                if LOCALIZATION_AVAILABLE:
+                    progress_txt = localization_manager.get_error_message("no_response")
+                else:
+                    progress_txt = "I processed your request but couldn't generate a proper response. Please try again."
 
             # Clear process message when done
             QtCore.QMetaObject.invokeMethod(
@@ -870,7 +966,10 @@ class ChatWindow(QtWidgets.QMainWindow):
             print(f"Displaying response: {progress_txt[:50]}...")
             self.display_assistant_message_from_thread(str(progress_txt))
         except Exception as e:
-            error_msg = f"Error processing input: {str(e)}"
+            if LOCALIZATION_AVAILABLE:
+                error_msg = localization_manager.get_error_message("general_error", error=str(e))
+            else:
+                error_msg = f"Error processing input: {str(e)}"
             print(f"Error processing input: {e}")
             
             # Try to update process message with error

@@ -17,13 +17,21 @@ import io
 import wave
 from prompts import command_name_extraction, commands_description, commands_names_extraction
 
-# Import language prompt manager
+# Import localization manager instead of language_prompts
 try:
-    from language_prompts import prompt_manager, detect_language
-    LANGUAGE_PROMPTS_AVAILABLE = True
+    from localization_manager import localization_manager, detect_language, set_current_language
+    LOCALIZATION_AVAILABLE = True
+    LANGUAGE_PROMPTS_AVAILABLE = True  # For backward compatibility
 except ImportError:
-    print("Warning: language_prompts module not available. Using default prompts.")
-    LANGUAGE_PROMPTS_AVAILABLE = False
+    print("Warning: localization_manager module not available. Trying fallback...")
+    LOCALIZATION_AVAILABLE = False
+    # Fallback to old system
+    try:
+        from language_prompts import prompt_manager, detect_language
+        LANGUAGE_PROMPTS_AVAILABLE = True
+    except ImportError:
+        print("Warning: language_prompts module not available. Using default prompts.")
+        LANGUAGE_PROMPTS_AVAILABLE = False
 
 # Import the file finder module
 try:
@@ -97,8 +105,14 @@ def extract_all_information_gpt(user_input):
             print("OpenAI client not initialized")
             return None
         
-        # Detect language using centralized function
-        if LANGUAGE_PROMPTS_AVAILABLE:
+        # Detect language and get appropriate prompt
+        if LOCALIZATION_AVAILABLE:
+            language_code = set_current_language(user_input)
+            print(f"Language detected for master extraction: {language_code}")
+            
+            # Get language-specific commands description
+            commands_description_text = localization_manager.get_prompt("commands_description", language_code)
+        elif LANGUAGE_PROMPTS_AVAILABLE:
             language_code = prompt_manager.set_current_language(user_input)
             print(f"Language detected for master extraction: {language_code}")
             
@@ -239,31 +253,46 @@ def extract_arguments_consolidated(command, user_input, process_callback=None):
                 filename = result.get("filename", "")
                 if filename:
                     if process_callback:
-                        process_callback(f"Using extracted filename: {filename}")
+                        if LOCALIZATION_AVAILABLE:
+                            process_callback(localization_manager.get_status_message("searching_file", filename=filename))
+                        else:
+                            process_callback(f"Using extracted filename: {filename}")
                     
                     # Check if file exists with full path
                     if os.path.isfile(filename):
                         args.append(filename)
                         print(f"Using full path: {filename}")
                         if process_callback:
-                            process_callback(f"File found: {filename}")
+                            if LOCALIZATION_AVAILABLE:
+                                process_callback(localization_manager.get_status_message("file_found", path=filename))
+                            else:
+                                process_callback(f"File found: {filename}")
                         return args, warning_txt
                     else:
                         # Try to find file in system if file_finder is available
                         if FILE_FINDER_AVAILABLE:
                             if process_callback:
-                                process_callback(f"Searching for file: {filename}")
+                                if LOCALIZATION_AVAILABLE:
+                                    process_callback(localization_manager.get_status_message("searching_file", filename=filename))
+                                else:
+                                    process_callback(f"Searching for file: {filename}")
                             found_file = find_file_in_system(filename)
                             if found_file:
                                 args.append(found_file)
                                 if process_callback:
-                                    process_callback(f"File found: {found_file}")
+                                    if LOCALIZATION_AVAILABLE:
+                                        process_callback(localization_manager.get_status_message("file_found", path=found_file))
+                                    else:
+                                        process_callback(f"File found: {found_file}")
                                 return args, warning_txt
                         
-                        warning_txt = f"File not found: {filename}"
+                        if LOCALIZATION_AVAILABLE:
+                            warning_txt = localization_manager.get_status_message("file_not_found", filename=filename)
+                        else:
+                            warning_txt = f"File not found: {filename}"
                         args.append(filename)  # Use filename as provided
                         if process_callback:
-                            process_callback(f"File not found: {filename}")
+                            process_callback(warning_txt)
                         return args, warning_txt
                 else:
                     # No filename extracted, fallback to old method
@@ -273,7 +302,10 @@ def extract_arguments_consolidated(command, user_input, process_callback=None):
                 folder_path = result.get("folder_path", "")
                 if folder_path:
                     if process_callback:
-                        process_callback(f"Using extracted folder: {folder_path}")
+                        if LOCALIZATION_AVAILABLE:
+                            process_callback(localization_manager.get_status_message("searching_directory", dirname=folder_path))
+                        else:
+                            process_callback(f"Using extracted folder: {folder_path}")
                     
                     # Check if directory exists
                     if os.path.isdir(folder_path):
@@ -283,13 +315,19 @@ def extract_arguments_consolidated(command, user_input, process_callback=None):
                             args.append(folder_path)
                         print(f"Using directory path: {folder_path}")
                         if process_callback:
-                            process_callback(f"Directory found: {folder_path}")
+                            if LOCALIZATION_AVAILABLE:
+                                process_callback(localization_manager.get_status_message("directory_found", path=folder_path))
+                            else:
+                                process_callback(f"Directory found: {folder_path}")
                         return args, warning_txt
                     else:
                         # Try to find directory in system if file_finder is available
                         if FILE_FINDER_AVAILABLE:
                             if process_callback:
-                                process_callback(f"Searching for directory: {folder_path}")
+                                if LOCALIZATION_AVAILABLE:
+                                    process_callback(localization_manager.get_status_message("searching_directory", dirname=folder_path))
+                                else:
+                                    process_callback(f"Searching for directory: {folder_path}")
                             found_folder = find_directory_in_system(folder_path)
                             if found_folder:
                                 if command == "setNewDirectory":
@@ -297,16 +335,22 @@ def extract_arguments_consolidated(command, user_input, process_callback=None):
                                 else:  # doFolderAnalysis
                                     args.append(found_folder)
                                 if process_callback:
-                                    process_callback(f"Directory found: {found_folder}")
+                                    if LOCALIZATION_AVAILABLE:
+                                        process_callback(localization_manager.get_status_message("directory_found", path=found_folder))
+                                    else:
+                                        process_callback(f"Directory found: {found_folder}")
                                 return args, warning_txt
                         
-                        warning_txt = f"Directory not found: {folder_path}"
+                        if LOCALIZATION_AVAILABLE:
+                            warning_txt = localization_manager.get_status_message("directory_not_found", path=folder_path)
+                        else:
+                            warning_txt = f"Directory not found: {folder_path}"
                         if command == "setNewDirectory":
                             args.extend([folder_path, False, ""])
                         else:  # doFolderAnalysis
                             args.append(folder_path)
                         if process_callback:
-                            process_callback(f"Directory not found: {folder_path}")
+                            process_callback(warning_txt)
                         return args, warning_txt
                 else:
                     # No folder path extracted, fallback to old method
@@ -354,7 +398,14 @@ def get_command_gpt(user_input):
             return None
         
         # Detect language using centralized function
-        if LANGUAGE_PROMPTS_AVAILABLE:
+        if LOCALIZATION_AVAILABLE:
+            language_code = set_current_language(user_input)
+            print(f"Language detected for command extraction: {language_code}")
+            
+            # Get language-specific prompt
+            commands_names_prompt = localization_manager.get_prompt("commands_names_extraction", language_code)
+            print(f"Using {language_code} prompt for command extraction")
+        elif LANGUAGE_PROMPTS_AVAILABLE:
             language_code = prompt_manager.set_current_language(user_input)
             print(f"Language detected for command extraction: {language_code}")
             
@@ -457,7 +508,14 @@ def chat_with_gpt(user_input):
             return "Sorry, I'm having trouble connecting to my knowledge base."
 
         # Detect language using centralized function
-        if LANGUAGE_PROMPTS_AVAILABLE:
+        if LOCALIZATION_AVAILABLE:
+            language_code = set_current_language(user_input)
+            print(f"Language detected for chat: {language_code}")
+            
+            # Get language-specific prompt
+            system_prompt = localization_manager.get_prompt("general_conversation_prompt", language_code)
+            print(f"Using {language_code} prompt for conversation")
+        elif LANGUAGE_PROMPTS_AVAILABLE:
             language_code = prompt_manager.set_current_language(user_input)
             print(f"Language detected for chat: {language_code}")
             
@@ -519,20 +577,35 @@ Stay within these boundaries and maintain a professional and technical tone.
 
         except openai.APIError as e:
             print(f"OpenAI API Error: {e}")
-            return f"I encountered an API error: {str(e)}. Please try again."
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_error_message("api_error", error=str(e))
+            else:
+                return f"I encountered an API error: {str(e)}. Please try again."
         except openai.RateLimitError as e:
             print(f"OpenAI Rate Limit Error: {e}")
-            return "I'm currently receiving too many requests. Please try again in a moment."
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_error_message("rate_limit")
+            else:
+                return "I'm currently receiving too many requests. Please try again in a moment."
         except openai.APIConnectionError as e:
             print(f"OpenAI API Connection Error: {e}")
-            return "I'm having trouble connecting to my knowledge base. Please check your internet connection."
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_error_message("connection_error")
+            else:
+                return "I'm having trouble connecting to my knowledge base. Please check your internet connection."
         except openai.AuthenticationError as e:
             print(f"OpenAI Authentication Error: {e}")
-            return "There's an issue with my authentication. Please contact support."
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_error_message("auth_error")
+            else:
+                return "There's an issue with my authentication. Please contact support."
 
     except Exception as e:
         print(f"Error communicating with OpenAI (detailed): {type(e).__name__}: {e}")
-        return f"I encountered an error: {str(e)}"
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_error_message("general_error", error=str(e))
+        else:
+            return f"I encountered an error: {str(e)}"
 
 
 def contains_code(response: str) -> bool:
@@ -667,38 +740,91 @@ def get_command_ollama(user_input):
 
 
 def status_message(command, args):
+    """Generate localized status messages for commands"""
+    
     if command == "loadData":
         try:
             data_f = re.sub(r'[\[\]"\']', '', str(", ".join(args)))
-            return f"Opening file: {data_f}"
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("load_data") + f" {data_f}"
+            else:
+                return f"Opening file: {data_f}"
         except Exception as e:
             print("Tried to extract file name, got exception: ", e)
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("load_data")
+            else:
+                return "Loading data file..."
 
     elif command == "setNewDirectory":
         try:
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
-            return f"Changing current directory to: {dir}"
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("set_directory") + f" {dir}"
+            else:
+                return f"Changing current directory to: {dir}"
         except Exception as e:
             print("Tried to extract directory name, got exception: ", e)
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("set_directory")
+            else:
+                return "Changing directory..."
+                
     elif command == "doFolderAnalysis":
         try:
             dir = re.sub(r'[\[\]"\']', '', str("".join(args[0])))
-            return f"Analyzing all files in directory: {dir}"
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("folder_analysis") + f" {dir}"
+            else:
+                return f"Analyzing all files in directory: {dir}"
         except Exception as e:
             print("Tried to extract directory name, got exception: ", e)
+            if LOCALIZATION_AVAILABLE:
+                return localization_manager.get_command_status("folder_analysis")
+            else:
+                return "Analyzing folder..."
+                
     elif command == "startDefectDetection":
-        return f"Starting defect detection on the current file..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("defect_detection")
+        else:
+            return "Starting defect detection on the current file..."
+            
     elif command == "doAnalysisSNR":
-        return f"Running SNR analysis on the current file..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("snr_analysis")
+        else:
+            return "Running SNR analysis on the current file..."
+            
     elif command == "getFileInformation":
-        return f"Retrieving file information..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("get_file_info")
+        else:
+            return "Retrieving file information..."
+            
     elif command == "getDirectory":
-        return f"Getting current directory information..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("get_directory")
+        else:
+            return "Getting current directory information..."
+            
     elif command == "updatePlot":
-        return f"Updating the plot display..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("update_plot")
+        else:
+            return "Updating the plot display..."
+            
     elif command == "makeSingleFileOnly":
-        return f"Generating report for the current file..."
-    return f"Processing command: {command}..."
+        if LOCALIZATION_AVAILABLE:
+            return localization_manager.get_command_status("generate_report")
+        else:
+            return "Generating report for the current file..."
+            
+    # Default fallback
+    if LOCALIZATION_AVAILABLE:
+        return localization_manager.get_status_message("processing_request")
+    else:
+        return f"Processing command: {command}..."
 
 
 def extract_folder_ollama(user_input):
@@ -706,7 +832,11 @@ def extract_folder_ollama(user_input):
     Extract folder path from user input using language-specific prompts
     """
     # Detect language and get appropriate prompt
-    if LANGUAGE_PROMPTS_AVAILABLE:
+    if LOCALIZATION_AVAILABLE:
+        language_code = set_current_language(user_input)
+        system_prompt = localization_manager.get_prompt("folder_path_extraction_prompt", language_code)
+        print(f"Using {language_code} prompt for folder extraction")
+    elif LANGUAGE_PROMPTS_AVAILABLE:
         language_code = prompt_manager.set_current_language(user_input)
         system_prompt = prompt_manager.get_prompt("folder_path_extraction_prompt", language_code)
         print(f"Using {language_code} prompt for folder extraction")
@@ -740,7 +870,11 @@ def extract_filename_ollama(user_input):
     Extract filename from user input using language-specific prompts
     """
     # Detect language and get appropriate prompt
-    if LANGUAGE_PROMPTS_AVAILABLE:
+    if LOCALIZATION_AVAILABLE:
+        language_code = set_current_language(user_input)
+        system_prompt = localization_manager.get_prompt("file_path_extraction_prompt", language_code)
+        print(f"Using {language_code} prompt for filename extraction")
+    elif LANGUAGE_PROMPTS_AVAILABLE:
         language_code = prompt_manager.set_current_language(user_input)
         system_prompt = prompt_manager.get_prompt("file_path_extraction_prompt", language_code)
         print(f"Using {language_code} prompt for filename extraction")
@@ -800,49 +934,73 @@ def extract_arguments(command, user_input, process_callback=None):
 
     if command == "loadData":
         if process_callback:
-            process_callback("Extracting filename from input...")
+            if LOCALIZATION_AVAILABLE:
+                process_callback(localization_manager.get_status_message("processing_request"))
+            else:
+                process_callback("Extracting filename from input...")
         full_path_match = re.search(r'"([^"]+\.(fpd|opd))"', user_input)
         if full_path_match:
             full_path = full_path_match.group(1)
             print(f"Detected full path in quotes: {full_path}")
             if process_callback:
-                process_callback(f"Checking file path: {full_path}")
+                if LOCALIZATION_AVAILABLE:
+                    process_callback(localization_manager.get_status_message("searching_file", filename=full_path))
+                else:
+                    process_callback(f"Checking file path: {full_path}")
             # Check if the file exists
             if os.path.isfile(full_path):
                 args.append(full_path)
                 print(f"Using full path: {full_path}")
                 if process_callback:
-                    process_callback(f"File found: {full_path}")
+                    if LOCALIZATION_AVAILABLE:
+                        process_callback(localization_manager.get_status_message("file_found", path=full_path))
+                    else:
+                        process_callback(f"File found: {full_path}")
                 return args, warning_txt
             else:
-                warning_txt = f"File not found at path: {full_path}"
+                if LOCALIZATION_AVAILABLE:
+                    warning_txt = localization_manager.get_status_message("file_not_found", filename=full_path)
+                else:
+                    warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
                 if process_callback:
-                    process_callback(f"File not found: {full_path}")
+                    process_callback(warning_txt)
 
         full_path_match = re.search(r'(?:open|load)\s+file\s+([A-Za-z]:\\[^\\]+(?:\\[^\\]+)+\.(fpd|opd))', user_input)
         if full_path_match:
             full_path = full_path_match.group(1)
             print(f"Detected full path without quotes: {full_path}")
             if process_callback:
-                process_callback(f"Checking file path: {full_path}")
+                if LOCALIZATION_AVAILABLE:
+                    process_callback(localization_manager.get_status_message("searching_file", filename=full_path))
+                else:
+                    process_callback(f"Checking file path: {full_path}")
             # Check if the file exists
             if os.path.isfile(full_path):
                 args.append(full_path)
                 print(f"Using full path: {full_path}")
                 if process_callback:
-                    process_callback(f"File found: {full_path}")
+                    if LOCALIZATION_AVAILABLE:
+                        process_callback(localization_manager.get_status_message("file_found", path=full_path))
+                    else:
+                        process_callback(f"File found: {full_path}")
                 return args, warning_txt
             else:
-                warning_txt = f"File not found at path: {full_path}"
+                if LOCALIZATION_AVAILABLE:
+                    warning_txt = localization_manager.get_status_message("file_not_found", filename=full_path)
+                else:
+                    warning_txt = f"File not found at path: {full_path}"
                 print(warning_txt)
                 if process_callback:
-                    process_callback(f"File not found: {full_path}")
+                    process_callback(warning_txt)
 
         filename = extract_filename_ollama(user_input).strip()
         print(f"Extracted filename: '{filename}'")
         if process_callback:
-            process_callback(f"Extracted filename: '{filename}'")
+            if LOCALIZATION_AVAILABLE:
+                process_callback(localization_manager.get_status_message("searching_file", filename=filename))
+            else:
+                process_callback(f"Extracted filename: '{filename}'")
 
         folder_match = re.search(r'(?:from|in|at)\s+(?:"([^"]+)"|([^\s,]+))', user_input)
         search_path = None
